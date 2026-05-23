@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Talitha Confeccionistas</title>
+  <link rel="manifest" href="manifest.json" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            gold: { 300:'#e8d48b', 400:'#ddc060', 500:'#c9a84c', 600:'#a8882d' },
+            talitha: { dark:'#0d0d0d', surface:'#1a1a1a', card:'#252525' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    * { -webkit-tap-highlight-color: transparent; }
+    body { background:#0d0d0d; color:#f1f5f9; font-family:'Inter',system-ui,sans-serif; overscroll-behavior:none; }
+    ::-webkit-scrollbar { width:4px; height:4px; }
+    ::-webkit-scrollbar-thumb { background:#3f3f46; border-radius:99px; }
+    .status-pending    { background:rgba(99,102,241,.15); color:#818cf8; border:1px solid rgba(99,102,241,.25); }
+    .status-in_progress{ background:rgba(245,158,11,.15); color:#fbbf24; border:1px solid rgba(245,158,11,.25); }
+    .status-delivered  { background:rgba(34,197,94,.15);  color:#4ade80; border:1px solid rgba(34,197,94,.25); }
+    .view { display:none; }
+    .view.active { display:block; }
+    .nav-item.active { color:#c9a84c; }
+    .nav-item.active svg { stroke:#c9a84c; }
+    .fade-in { animation:fadeIn .2s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+    .active\:scale-95:active { transform:scale(.95); }
+    html:not(.dark) body { background:#f8fafc; color:#0f172a; }
+    html:not(.dark) .dark\:bg-talitha-dark { background:#ffffff; }
+    html:not(.dark) .dark\:bg-talitha-surface { background:#f1f5f9; }
+    html:not(.dark) .dark\:bg-talitha-card { background:#e2e8f0; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+    input[type=number] { -moz-appearance:textfield; }
+  </style>
+</head>
+<body class="h-screen overflow-hidden">
+
+<!-- ================================================================ LOGIN ================================================================ -->
+<div id="view-login" class="min-h-screen flex items-center justify-center p-4 dark:bg-talitha-dark bg-slate-50">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="w-20 h-20 mx-auto mb-3 rounded-2xl bg-gold-500/10 border border-gold-500/20 flex items-center justify-center">
+        <svg class="w-10 h-10 text-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"/></svg>
+      </div>
+      <h1 class="text-2xl font-bold text-gold-400">Talitha</h1>
+      <p class="text-slate-400 text-sm mt-1">Gestión de Confección</p>
+    </div>
+    <div class="dark:bg-talitha-surface bg-white rounded-2xl p-6 shadow-xl space-y-4">
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Celular</label>
+        <input id="login-phone" type="tel" inputmode="numeric" placeholder="3XXXXXXXXX"
+          class="w-full px-4 py-3 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500"
+          onkeypress="if(event.key==='Enter')document.getElementById('login-password').focus()" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Contraseña</label>
+        <input id="login-password" type="password" placeholder="••••••••"
+          class="w-full px-4 py-3 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500"
+          onkeypress="if(event.key==='Enter')handleLogin()" />
+      </div>
+      <p id="login-error" class="text-red-400 text-xs hidden"></p>
+      <button onclick="handleLogin()" id="btn-login"
+        class="w-full py-3.5 bg-gold-500 hover:bg-gold-600 text-white font-bold rounded-xl text-sm active:scale-95 transition-all">
+        Ingresar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ LOADING ================================================================ -->
+<div id="view-loading" class="hidden min-h-screen flex items-center justify-center dark:bg-talitha-dark">
+  <div class="text-center">
+    <div class="w-10 h-10 border-2 border-gold-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+    <p class="text-slate-400 text-sm">Cargando...</p>
+  </div>
+</div>
+
+<!-- ================================================================ APP SHELL ================================================================ -->
+<div id="app-shell" class="hidden h-screen flex flex-col dark:bg-talitha-dark bg-slate-50">
+
+  <!-- Header -->
+  <header class="flex items-center gap-3 px-4 py-3 dark:bg-talitha-surface bg-white border-b dark:border-neutral-800 border-slate-200 flex-shrink-0">
+    <button id="header-back" onclick="goBack()" class="hidden p-2 -ml-2 text-slate-400 hover:text-gold-400 transition-colors">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    </button>
+    <div class="flex-1 min-w-0">
+      <h1 id="header-title" class="font-bold text-base truncate">Talitha Confeccionistas</h1>
+      <p id="header-subtitle" class="text-xs text-slate-400 truncate hidden"></p>
+    </div>
+    <button id="header-action" onclick="handleHeaderAction()" class="hidden px-3 py-2 bg-gold-500 hover:bg-gold-600 text-white rounded-xl text-xs font-bold active:scale-95 transition-all flex items-center gap-1.5">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      <span id="header-action-label">Nuevo</span>
+    </button>
+    <button onclick="handleLogout()" class="p-2 text-slate-400 hover:text-gold-400 transition-colors">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+    </button>
+  </header>
+
+  <!-- Main content -->
+  <main class="flex-1 overflow-y-auto pb-20">
+
+    <!-- ============ VIEW: TASKS (dashboard) ============ -->
+    <div id="view-tasks" class="view">
+      <!-- Stats bar (admin only) -->
+      <div id="tasks-stats" class="hidden px-4 pt-3 pb-1 grid grid-cols-3 gap-2">
+        <div class="dark:bg-talitha-card bg-white rounded-xl p-3 text-center border dark:border-neutral-800 border-slate-200">
+          <p id="stat-pending" class="text-xl font-bold text-indigo-400">0</p>
+          <p class="text-xs text-slate-500 mt-0.5">Pendientes</p>
+        </div>
+        <div class="dark:bg-talitha-card bg-white rounded-xl p-3 text-center border dark:border-neutral-800 border-slate-200">
+          <p id="stat-in-progress" class="text-xl font-bold text-amber-400">0</p>
+          <p class="text-xs text-slate-500 mt-0.5">En proceso</p>
+        </div>
+        <div class="dark:bg-talitha-card bg-white rounded-xl p-3 text-center border dark:border-neutral-800 border-slate-200">
+          <p id="stat-delivered" class="text-xl font-bold text-green-400">0</p>
+          <p class="text-xs text-slate-500 mt-0.5">Entregadas</p>
+        </div>
+      </div>
+      <!-- Filter tabs -->
+      <div class="flex gap-2 px-4 py-3 overflow-x-auto hide-scrollbar">
+        <button onclick="setTaskFilter('all')" data-filter="all" class="task-filter-btn flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border dark:border-neutral-700 border-slate-300 dark:text-slate-300 text-slate-600 transition-all active-filter">Todas</button>
+        <button onclick="setTaskFilter('pending')" data-filter="pending" class="task-filter-btn flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border dark:border-neutral-700 border-slate-300 dark:text-slate-300 text-slate-600 transition-all">⏳ Pendiente</button>
+        <button onclick="setTaskFilter('in_progress')" data-filter="in_progress" class="task-filter-btn flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border dark:border-neutral-700 border-slate-300 dark:text-slate-300 text-slate-600 transition-all">🧵 En proceso</button>
+        <button onclick="setTaskFilter('delivered')" data-filter="delivered" class="task-filter-btn flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border dark:border-neutral-700 border-slate-300 dark:text-slate-300 text-slate-600 transition-all">✅ Entregado</button>
+      </div>
+      <div id="tasks-list" class="px-4 space-y-3 pb-4"></div>
+    </div>
+
+    <!-- ============ VIEW: TASK DETAIL ============ -->
+    <div id="view-task-detail" class="view">
+      <div class="p-4 space-y-4">
+        <!-- Info card -->
+        <div class="dark:bg-talitha-surface bg-white rounded-2xl p-4 shadow-sm">
+          <div class="flex items-start justify-between gap-2 mb-3">
+            <div class="flex-1 min-w-0">
+              <h2 id="td-garment-name" class="font-bold text-lg leading-tight"></h2>
+              <p id="td-garment-ref" class="text-xs text-gold-400 font-mono mt-0.5"></p>
+            </div>
+            <span id="td-status-badge" class="text-xs font-semibold px-3 py-1.5 rounded-xl flex-shrink-0"></span>
+          </div>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div class="dark:bg-neutral-800/50 bg-slate-50 rounded-xl p-3">
+              <p class="text-xs text-slate-500 mb-0.5">Confeccionista</p>
+              <p id="td-conf-name" class="font-semibold text-sm"></p>
+            </div>
+            <div class="dark:bg-neutral-800/50 bg-slate-50 rounded-xl p-3">
+              <p class="text-xs text-slate-500 mb-0.5">Cantidad</p>
+              <p id="td-quantity" class="font-bold text-lg text-gold-400"></p>
+            </div>
+            <div class="dark:bg-neutral-800/50 bg-slate-50 rounded-xl p-3">
+              <p class="text-xs text-slate-500 mb-0.5">Asignado</p>
+              <p id="td-created-at" class="font-medium text-xs"></p>
+            </div>
+            <div id="td-delivered-row" class="dark:bg-neutral-800/50 bg-slate-50 rounded-xl p-3 hidden">
+              <p class="text-xs text-slate-500 mb-0.5">Entregado</p>
+              <p id="td-delivered-at" class="font-medium text-xs"></p>
+            </div>
+          </div>
+          <div id="td-notes-row" class="mt-3 hidden">
+            <p class="text-xs text-slate-500 mb-1">Notas</p>
+            <p id="td-notes" class="text-sm dark:bg-neutral-800/50 bg-slate-50 rounded-xl p-3"></p>
+          </div>
+        </div>
+
+        <!-- Parts section -->
+        <div class="dark:bg-talitha-surface bg-white rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-gold-400 uppercase tracking-wide">Partes / Materiales</h3>
+            <span id="td-parts-progress" class="text-xs text-slate-400"></span>
+          </div>
+          <div id="td-parts-list" class="space-y-2"></div>
+        </div>
+
+        <!-- Delivery photo (admin uploads) -->
+        <div class="dark:bg-talitha-surface bg-white rounded-2xl p-4 shadow-sm">
+          <h3 class="text-sm font-semibold text-gold-400 uppercase tracking-wide mb-3">Foto de Entrega de Insumos</h3>
+          <p class="text-xs text-slate-500 mb-3">Admin confirma entrega de materiales al confeccionista</p>
+          <div id="td-delivery-photo-container">
+            <img id="td-delivery-photo-img" src="" alt="Foto entrega" class="hidden w-full rounded-xl object-cover max-h-48 mb-3 cursor-pointer" onclick="viewPhoto(this.src)" />
+            <div id="td-delivery-no-photo" class="text-xs text-slate-500 text-center py-4 hidden">Sin foto de entrega aún</div>
+            <div id="td-delivery-upload-section" class="hidden">
+              <input type="file" id="delivery-photo-input" accept="image/*" capture="environment" class="hidden" onchange="handlePhotoUpload('delivery', this)" />
+              <button onclick="document.getElementById('delivery-photo-input').click()"
+                class="w-full py-2.5 border border-dashed border-gold-500/40 text-gold-400 rounded-xl text-sm font-medium hover:border-gold-500 transition-colors active:scale-95 flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+                📸 Capturar / Subir foto de insumos
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Completion photo (confeccionista uploads) -->
+        <div class="dark:bg-talitha-surface bg-white rounded-2xl p-4 shadow-sm">
+          <h3 class="text-sm font-semibold text-gold-400 uppercase tracking-wide mb-3">Foto de Producto Terminado</h3>
+          <p class="text-xs text-slate-500 mb-3">Confeccionista carga evidencia del trabajo finalizado</p>
+          <div id="td-completion-photo-container">
+            <img id="td-completion-photo-img" src="" alt="Foto terminado" class="hidden w-full rounded-xl object-cover max-h-48 mb-3 cursor-pointer" onclick="viewPhoto(this.src)" />
+            <div id="td-completion-no-photo" class="text-xs text-slate-500 text-center py-4 hidden">Sin foto de producto terminado aún</div>
+            <div id="td-completion-upload-section" class="hidden">
+              <input type="file" id="completion-photo-input" accept="image/*" capture="environment" class="hidden" onchange="handlePhotoUpload('completion', this)" />
+              <button onclick="document.getElementById('completion-photo-input').click()"
+                class="w-full py-2.5 border border-dashed border-green-500/40 text-green-400 rounded-xl text-sm font-medium hover:border-green-500 transition-colors active:scale-95 flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+                📸 Subir foto del producto terminado
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div id="td-actions" class="space-y-2"></div>
+
+        <!-- Admin: delete task -->
+        <div id="td-admin-delete" class="hidden">
+          <button onclick="confirmDeleteTask()"
+            class="w-full py-3 border border-red-500/30 text-red-400 rounded-xl text-sm font-medium hover:bg-red-500/10 transition-all active:scale-95">
+            🗑 Eliminar tarea
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ VIEW: GARMENTS ============ -->
+    <div id="view-garments" class="view">
+      <div class="p-4">
+        <div id="garments-list" class="space-y-3"></div>
+        <p id="garments-empty" class="hidden text-center text-slate-500 text-sm py-8">No hay prendas creadas.<br>Toca + Nueva Prenda para empezar.</p>
+      </div>
+    </div>
+
+    <!-- ============ VIEW: GARMENT DETAIL + BOM ============ -->
+    <div id="view-garment-detail" class="view">
+      <div class="p-4 space-y-4">
+        <!-- Garment info -->
+        <div class="dark:bg-talitha-surface bg-white rounded-2xl p-4 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div>
+              <h2 id="gd-name" class="font-bold text-lg"></h2>
+              <p id="gd-ref" class="text-xs text-gold-400 font-mono"></p>
+              <p id="gd-desc" class="text-sm text-slate-400 mt-1"></p>
+            </div>
+            <button onclick="confirmDeleteGarment()" class="p-2 text-red-400/50 hover:text-red-400 transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- BOM -->
+        <div class="dark:bg-talitha-surface bg-white rounded-2xl p-4 shadow-sm">
+          <h3 class="text-sm font-semibold text-gold-400 uppercase tracking-wide mb-3">Lista de Materiales (BOM)</h3>
+          <div id="gd-parts-list" class="space-y-2 mb-3"></div>
+          <p id="gd-parts-empty" class="text-xs text-slate-500 text-center py-2 hidden">Sin partes. Agrega la primera parte de esta prenda.</p>
+          <!-- Add part form -->
+          <div class="border-t dark:border-neutral-700 border-slate-200 pt-3 mt-2">
+            <p class="text-xs text-gold-400 font-semibold uppercase tracking-wide mb-2">Agregar Parte</p>
+            <div class="space-y-2">
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">Nombre de la pieza *</label>
+                  <input id="np-name" type="text" placeholder="Ej: Cuello, Manga..."
+                    class="w-full px-3 py-2.5 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500" />
+                </div>
+                <div>
+                  <label class="text-xs text-slate-500 mb-1 block">Tipo de tela</label>
+                  <input id="np-fabric" type="text" placeholder="Ej: Algodón jersey"
+                    class="w-full px-3 py-2.5 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500" />
+                </div>
+              </div>
+              <div>
+                <label class="text-xs text-slate-500 mb-1 block">Cantidad por unidad *</label>
+                <input id="np-qty" type="number" min="1" value="1" placeholder="1"
+                  class="w-full px-3 py-2.5 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500" />
+              </div>
+              <button onclick="saveGarmentPart()"
+                class="w-full py-2.5 bg-gold-500 hover:bg-gold-600 text-white font-bold rounded-xl text-sm active:scale-95 transition-all">
+                + Agregar Parte
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ VIEW: USERS ============ -->
+    <div id="view-users" class="view">
+      <div class="p-4">
+        <div id="users-list" class="space-y-3"></div>
+        <p id="users-empty" class="hidden text-center text-slate-500 text-sm py-8">No hay confeccionistas creados.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Bottom Nav -->
+  <nav id="bottom-nav" class="fixed bottom-0 left-0 right-0 dark:bg-talitha-surface bg-white border-t dark:border-neutral-800 border-slate-200 flex justify-around items-center px-2 py-2 z-30">
+    <!-- Admin nav -->
+    <div id="nav-admin" class="hidden w-full flex justify-around">
+      <button onclick="showMainView('view-tasks')" data-view="view-tasks" class="nav-item flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-colors active">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        <span class="text-xs font-medium">Tareas</span>
+      </button>
+      <button onclick="showMainView('view-garments')" data-view="view-garments" class="nav-item flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+        <span class="text-xs font-medium">Prendas</span>
+      </button>
+      <button onclick="showMainView('view-users')" data-view="view-users" class="nav-item flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+        <span class="text-xs font-medium">Usuarios</span>
+      </button>
+    </div>
+    <!-- Confeccionista nav -->
+    <div id="nav-conf" class="hidden w-full flex justify-center">
+      <button class="nav-item flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-colors active">
+        <svg class="w-5 h-5 stroke-gold-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        <span class="text-xs font-medium text-gold-400">Mis Tareas</span>
+      </button>
+    </div>
+  </nav>
+
+</div><!-- end app-shell -->
+
+<!-- ================================================================ MODAL: NEW TASK ================================================================ -->
+<div id="modal-new-task" class="hidden fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="w-full sm:max-w-lg dark:bg-talitha-surface bg-white rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between p-4 border-b dark:border-neutral-800 border-slate-200">
+      <h2 class="font-bold text-base">Nueva Tarea de Confección</h2>
+      <button onclick="closeModal('modal-new-task')" class="p-2 text-slate-400 hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="p-4 space-y-3">
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Prenda *</label>
+        <select id="nt-garment" onchange="previewTaskParts()" class="w-full px-3 py-3 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500">
+          <option value="">Seleccionar prenda...</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Confeccionista *</label>
+        <select id="nt-conf" class="w-full px-3 py-3 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500">
+          <option value="">Seleccionar confeccionista...</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Cantidad de unidades *</label>
+        <input id="nt-quantity" type="number" min="1" placeholder="Ej: 25" oninput="previewTaskParts()"
+          class="w-full px-3 py-3 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500" />
+      </div>
+      <!-- Parts preview -->
+      <div id="nt-parts-preview" class="hidden">
+        <p class="text-xs text-gold-400 font-semibold uppercase tracking-wide mb-2">Partes que se asignarán</p>
+        <div id="nt-parts-list" class="space-y-1.5 max-h-40 overflow-y-auto"></div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Notas (opcional)</label>
+        <textarea id="nt-notes" rows="2" placeholder="Instrucciones especiales..."
+          class="w-full px-3 py-2.5 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500 resize-none"></textarea>
+      </div>
+      <p id="nt-error" class="text-red-400 text-xs hidden"></p>
+      <button onclick="saveNewTask()" id="btn-save-task"
+        class="w-full py-3.5 bg-gold-500 hover:bg-gold-600 text-white font-bold rounded-xl text-sm active:scale-95 transition-all">
+        ✓ Crear Tarea
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ MODAL: NEW GARMENT ================================================================ -->
+<div id="modal-new-garment" class="hidden fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="w-full sm:max-w-md dark:bg-talitha-surface bg-white rounded-t-2xl sm:rounded-2xl">
+    <div class="flex items-center justify-between p-4 border-b dark:border-neutral-800 border-slate-200">
+      <h2 class="font-bold text-base">Nueva Prenda</h2>
+      <button onclick="closeModal('modal-new-garment')" class="p-2 text-slate-400 hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="p-4 space-y-3">
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Nombre *</label>
+        <input id="ng-name" type="text" placeholder="Ej: Pijama Básico Adulto"
+          class="w-full px-3 py-3 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Referencia *</label>
+        <input id="ng-ref" type="text" placeholder="Ej: PJ-BASIC-01"
+          class="w-full px-3 py-3 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-gold-500" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Descripción</label>
+        <textarea id="ng-desc" rows="2" placeholder="Descripción general de la prenda..."
+          class="w-full px-3 py-2.5 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500 resize-none"></textarea>
+      </div>
+      <p id="ng-error" class="text-red-400 text-xs hidden"></p>
+      <button onclick="saveNewGarment()"
+        class="w-full py-3.5 bg-gold-500 hover:bg-gold-600 text-white font-bold rounded-xl text-sm active:scale-95 transition-all">
+        ✓ Crear Prenda
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ MODAL: NEW USER ================================================================ -->
+<div id="modal-new-user" class="hidden fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="w-full sm:max-w-md dark:bg-talitha-surface bg-white rounded-t-2xl sm:rounded-2xl">
+    <div class="flex items-center justify-between p-4 border-b dark:border-neutral-800 border-slate-200">
+      <h2 class="font-bold text-base">Nuevo Confeccionista</h2>
+      <button onclick="closeModal('modal-new-user')" class="p-2 text-slate-400 hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="p-4 space-y-3">
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Nombre completo *</label>
+        <input id="nu-name" type="text" placeholder="Ej: Don Guillermo López"
+          class="w-full px-3 py-3 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Celular *</label>
+        <input id="nu-phone" type="tel" inputmode="numeric" placeholder="3XXXXXXXXX"
+          class="w-full px-3 py-3 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-500 mb-1 block font-medium">Contraseña *</label>
+        <input id="nu-password" type="password" placeholder="Mínimo 6 caracteres"
+          class="w-full px-3 py-3 rounded-xl border dark:border-neutral-700 border-slate-300 dark:bg-neutral-900 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500" />
+      </div>
+      <p id="nu-error" class="text-red-400 text-xs hidden"></p>
+      <button onclick="saveNewUser()" id="btn-save-user"
+        class="w-full py-3.5 bg-gold-500 hover:bg-gold-600 text-white font-bold rounded-xl text-sm active:scale-95 transition-all">
+        ✓ Crear Confeccionista
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ MODAL: CONFIRM ================================================================ -->
+<div id="modal-confirm" class="hidden fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+  <div class="w-full max-w-xs dark:bg-talitha-surface bg-white rounded-2xl p-5 shadow-2xl">
+    <h3 id="confirm-title" class="font-bold text-base mb-2">¿Confirmar acción?</h3>
+    <p id="confirm-msg" class="text-sm text-slate-400 mb-5"></p>
+    <div class="flex gap-3">
+      <button onclick="closeModal('modal-confirm')" class="flex-1 py-2.5 border dark:border-neutral-600 border-slate-300 rounded-xl text-sm font-medium active:scale-95 transition-all">Cancelar</button>
+      <button id="confirm-ok-btn" class="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold active:scale-95 transition-all">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Photo viewer -->
+<div id="photo-viewer" class="hidden fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onclick="closePhotoViewer()">
+  <img id="photo-viewer-img" src="" class="max-w-full max-h-full object-contain rounded-xl" />
+</div>
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-sm font-semibold shadow-lg text-white whitespace-nowrap pointer-events-none transition-all"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
