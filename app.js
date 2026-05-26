@@ -560,28 +560,37 @@ async function handlePhotoUpload(asigId, input) {
 // ================================================================
 async function loadUsers() {
   const { data } = await sb.from('profiles')
-    .select('*').eq('role','confeccionista').order('full_name');
-  state.confeccionistas = data || [];
+    .select('*').order('role').order('full_name');
+  state.allUsers = data || [];
   renderUsers();
 }
 
 function renderUsers() {
   const container = document.getElementById('users-list');
-  if (!state.confeccionistas.length) {
+  const users = state.allUsers || [];
+  if (!users.length) {
     container.innerHTML = `<div class="text-center py-16 text-slate-500">
       <div class="text-5xl mb-4">👷</div>
-      <p class="text-sm">No hay confeccionistas. Toca + para agregar.</p>
+      <p class="text-sm">No hay usuarios. Toca "Crear nuevo usuario" para agregar.</p>
     </div>`;
     return;
   }
-  container.innerHTML = state.confeccionistas.map(u => `
+  container.innerHTML = users.map(u => {
+    const isAdmin = u.role === 'admin';
+    const roleBadge = isAdmin
+      ? `<span class="text-xs px-2 py-0.5 rounded-full bg-gold-500/20 text-gold-400 border border-gold-500/30 font-medium">⭐ Admin</span>`
+      : `<span class="text-xs px-2 py-0.5 rounded-full bg-blue-900/30 text-blue-400 border border-blue-800/40 font-medium">🧵 Confeccionista</span>`;
+    return `
     <div class="card p-4 flex items-center gap-3">
       <div class="w-11 h-11 rounded-full bg-gold-500/20 flex items-center justify-center text-gold-400 font-bold text-base shrink-0">
         ${(u.full_name||'?').charAt(0).toUpperCase()}
       </div>
       <div class="flex-1 min-w-0">
-        <p class="font-semibold text-white text-sm truncate">${escHtml(u.full_name||'')}</p>
-        <p class="text-slate-500 text-xs">${escHtml(u.phone||'')}</p>
+        <div class="flex items-center gap-2 flex-wrap">
+          <p class="font-semibold text-white text-sm truncate">${escHtml(u.full_name||'')}</p>
+          ${roleBadge}
+        </div>
+        <p class="text-slate-500 text-xs mt-0.5">${escHtml(u.phone||'')}</p>
       </div>
       <div class="flex items-center gap-2 shrink-0">
         <button onclick="toggleUserActive('${u.id}',${u.is_active})"
@@ -593,7 +602,8 @@ function renderUsers() {
         <button onclick="confirmDeleteUser('${u.id}','${escHtml(u.full_name||'')}')"
           class="text-red-400/40 hover:text-red-400 text-xl">×</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 async function saveNewUser() {
@@ -620,7 +630,7 @@ async function saveNewUser() {
     const res = await fetch(`${EDGE_BASE}/create-user`, {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${session.access_token}` },
-      body: JSON.stringify({ phone, password, full_name: name, role: 'confeccionista' }),
+      body: JSON.stringify({ phone, password, full_name: name, role: document.getElementById('new-user-role').value || 'confeccionista' }),
       signal: ctrl.signal
     });
     clearTimeout(timeout);
@@ -629,7 +639,8 @@ async function saveNewUser() {
 
     closeModal('modal-new-user');
     ['new-user-name','new-user-phone','new-user-password'].forEach(id => document.getElementById(id).value = '');
-    showToast('✅ Confeccionista creado');
+    selectRole('confeccionista'); // reset role selector
+    showToast('✅ Usuario creado');
     await loadUsers();
     await loadConfeccionistas();
   } catch (err) {
@@ -645,8 +656,8 @@ async function toggleUserActive(userId, current) {
   const { error } = await sb.from('profiles').update({ is_active: !current }).eq('id', userId);
   if (error) { showToast('Error al actualizar', 'error'); return; }
   showToast(current ? 'Usuario desactivado' : 'Usuario activado');
-  await loadUsers();
-  await loadConfeccionistas();
+  await loadUsers();      // refresh full user list
+  await loadConfeccionistas(); // keep confeccionistas in sync for asignacion modal
 }
 
 function confirmDeleteUser(userId, name) {
@@ -698,8 +709,19 @@ function openNewUserModal() {
   ['new-user-name','new-user-phone','new-user-password']
     .forEach(id => document.getElementById(id).value = '');
   document.getElementById('new-user-error').classList.add('hidden');
+  selectRole('confeccionista'); // default role
   openModal('modal-new-user');
   setTimeout(() => document.getElementById('new-user-name').focus(), 200);
+}
+
+function selectRole(role) {
+  document.getElementById('new-user-role').value = role;
+  const activeClass   = 'border-gold-500 bg-gold-500/10 text-gold-400';
+  const inactiveClass = 'border-zinc-700 bg-transparent text-slate-400';
+  document.getElementById('role-btn-conf').className  =
+    `role-btn py-3 px-4 rounded-xl border text-sm font-medium text-center transition-all ${role === 'confeccionista' ? activeClass : inactiveClass}`;
+  document.getElementById('role-btn-admin').className =
+    `role-btn py-3 px-4 rounded-xl border text-sm font-medium text-center transition-all ${role === 'admin' ? activeClass : inactiveClass}`;
 }
 
 // ================================================================
@@ -731,7 +753,7 @@ function showMainView(viewId) {
     document.getElementById('header-title').textContent = 'Talitha Confeccionistas';
     actionBtn.classList.toggle('hidden', !isAdmin);
   } else if (viewId === 'view-users') {
-    document.getElementById('header-title').textContent = 'Confeccionistas';
+    document.getElementById('header-title').textContent = 'Usuarios';
     actionBtn.classList.toggle('hidden', !isAdmin);
     loadUsers();
   }

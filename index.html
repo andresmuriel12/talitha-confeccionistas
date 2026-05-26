@@ -62,10 +62,14 @@
     input[type=number] { -moz-appearance:textfield; }
     .line-clamp-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 
-    /* Modal overlay */
-    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.7); backdrop-filter:blur(4px); z-index:50; display:none; align-items:flex-end; justify-content:center; }
+    /* Modal overlay — centrado en PC/tablet, bottom-sheet en móvil */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); backdrop-filter:blur(6px); z-index:50; display:none; align-items:center; justify-content:center; padding:20px; }
     .modal-overlay.open { display:flex; }
-    .modal-sheet { background:#1a1a1a; border-radius:24px 24px 0 0; padding:20px; width:100%; max-width:480px; max-height:90vh; overflow-y:auto; }
+    .modal-sheet { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:24px; padding:24px; width:100%; max-width:500px; max-height:90vh; overflow-y:auto; box-shadow:0 25px 60px rgba(0,0,0,.6); }
+    @media (max-width:600px) {
+      .modal-overlay { align-items:flex-end; padding:0; }
+      .modal-sheet { border-radius:24px 24px 0 0; max-width:100%; border-bottom:none; }
+    }
 
     /* Photo overlay */
     #photo-overlay { position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:100; display:none; align-items:center; justify-content:center; }
@@ -177,6 +181,13 @@
 
     <!-- ========== VIEW: USUARIOS ========== -->
     <section id="view-users" class="view absolute inset-0 overflow-y-auto">
+      <!-- Botón siempre visible para crear usuario -->
+      <div class="px-3 pt-3">
+        <button onclick="openNewUserModal()"
+          class="w-full py-4 bg-gold-500 hover:bg-gold-600 active:bg-gold-600 text-black font-bold rounded-2xl text-sm flex items-center justify-center gap-2 transition-colors">
+          <span class="text-xl font-light">+</span> Crear nuevo usuario
+        </button>
+      </div>
       <div id="users-list" class="px-3 py-3 pb-28 space-y-3"></div>
     </section>
 
@@ -287,13 +298,13 @@
 <div id="modal-new-user" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-new-user')">
   <div class="modal-sheet">
     <div class="flex items-center justify-between mb-5">
-      <h2 class="text-lg font-bold text-white">Nuevo Confeccionista</h2>
+      <h2 class="text-lg font-bold text-white">Nuevo Usuario</h2>
       <button onclick="closeModal('modal-new-user')" class="text-slate-400 hover:text-white text-2xl leading-none">×</button>
     </div>
     <div class="space-y-4">
       <div>
         <label class="text-xs text-slate-400 mb-1 block">Nombre completo *</label>
-        <input id="new-user-name" type="text" placeholder="Nombre del confeccionista"
+        <input id="new-user-name" type="text" placeholder="Nombre completo"
           class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500" />
       </div>
       <div>
@@ -306,8 +317,22 @@
         <input id="new-user-password" type="text" placeholder="Mínimo 6 caracteres"
           class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500" />
       </div>
+      <div>
+        <label class="text-xs text-slate-400 mb-1 block">Rol *</label>
+        <div class="grid grid-cols-2 gap-3" id="role-selector">
+          <button type="button" onclick="selectRole('confeccionista')" id="role-btn-conf"
+            class="role-btn active-role py-3 px-4 rounded-xl border border-gold-500 bg-gold-500/10 text-gold-400 text-sm font-medium text-center transition-all">
+            🧵 Confeccionista
+          </button>
+          <button type="button" onclick="selectRole('admin')" id="role-btn-admin"
+            class="role-btn py-3 px-4 rounded-xl border border-zinc-700 bg-transparent text-slate-400 text-sm font-medium text-center transition-all">
+            ⭐ Administrador
+          </button>
+        </div>
+        <input type="hidden" id="new-user-role" value="confeccionista" />
+      </div>
     </div>
-    <div id="new-user-error" class="text-red-400 text-xs mt-2 hidden"></div>
+    <div id="new-user-error" class="text-red-400 text-xs mt-3 hidden"></div>
     <div class="flex gap-3 mt-6">
       <button onclick="closeModal('modal-new-user')" class="flex-1 py-3 rounded-xl border border-zinc-700 text-slate-400 text-sm font-medium">Cancelar</button>
       <button onclick="saveNewUser()" id="btn-save-user" class="flex-1 btn-gold">Crear Usuario</button>
