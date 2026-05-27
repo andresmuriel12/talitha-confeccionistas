@@ -227,8 +227,12 @@ async function loadPrendaDetail(prendaId, navigate = true) {
     .select('*').eq('id', prendaId).single();
   if (pErr || !prenda) { showToast('Error cargando prenda', 'error'); return; }
 
+  const isAdmin = state.profile?.role === 'admin';
+  const asigSelect = isAdmin
+    ? '*, confeccionista:profiles!confeccionista_id(id, full_name, phone)'
+    : '*';
   const { data: asigs } = await sb.from('asignaciones')
-    .select('*, confeccionista:profiles!confeccionista_id(id, full_name, phone)')
+    .select(asigSelect)
     .eq('prenda_id', prendaId)
     .order('created_at');
 
@@ -353,6 +357,7 @@ function renderAsignacionesAdmin(asigs, container) {
             <span class="text-slate-400">Entregadas: <strong class="text-green-400">${a.cantidad_entregada}</strong></span>
             <span class="text-slate-400">Pendientes: <strong class="text-yellow-400">${Math.max(0, a.cantidad_asignada - a.cantidad_entregada)}</strong></span>
           </div>
+          ${a.nota_confeccionista ? `<p class="text-blue-300/80 text-xs mt-2">💬 <em>${escHtml(a.nota_confeccionista)}</em></p>` : ''}
           ${a.foto_url
             ? `<img src="${escHtml(a.foto_url)}" onclick="openPhoto('${escHtml(a.foto_url)}')"
                     class="h-24 w-36 object-cover rounded-xl cursor-pointer mt-2 border border-zinc-700" />`
@@ -402,6 +407,11 @@ function renderAsignacionesConf(asigs, container) {
         </div>
         <div class="flex items-center justify-between text-sm">
           <span class="text-slate-500">Pendientes: <strong id="pend-${a.id}" class="text-yellow-400">${Math.max(0, a.cantidad_asignada - a.cantidad_entregada)}</strong></span>
+        </div>
+        <div>
+          <label class="text-xs text-slate-400 mb-1 block">📝 Mi nota</label>
+          <textarea id="inp-nota-${a.id}" rows="2" placeholder="Agrega una nota sobre tu avance..."
+            class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:border-gold-500 resize-none">${escHtml(a.nota_confeccionista||'')}</textarea>
         </div>
         <button onclick="saveAsignacionProgress('${a.id}')" class="btn-gold py-3">💾 Guardar progreso</button>
       </div>
@@ -507,12 +517,14 @@ async function saveNewAsignacion() {
 }
 
 async function saveAsignacionProgress(asigId) {
-  const confeccionada = parseInt(document.getElementById(`inp-conf-${asigId}`)?.value) || 0;
-  const entregada     = parseInt(document.getElementById(`inp-entr-${asigId}`)?.value) || 0;
+  const confeccionada    = parseInt(document.getElementById(`inp-conf-${asigId}`)?.value) || 0;
+  const entregada        = parseInt(document.getElementById(`inp-entr-${asigId}`)?.value) || 0;
+  const notaConf         = document.getElementById(`inp-nota-${asigId}`)?.value || '';
 
   const { error } = await sb.from('asignaciones').update({
     cantidad_confeccionada: confeccionada,
-    cantidad_entregada:     entregada
+    cantidad_entregada:     entregada,
+    nota_confeccionista:    notaConf
   }).eq('id', asigId);
 
   if (error) { showToast('Error al guardar', 'error'); return; }
