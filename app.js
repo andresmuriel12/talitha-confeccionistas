@@ -306,7 +306,7 @@ function renderPrendaDetail() {
         ${statusBadge(prenda.status)}
       </div>
       ${prenda.descripcion ? `<p class="text-slate-400 text-sm mb-2">${escHtml(prenda.descripcion)}</p>` : ''}
-      <p class="text-sm text-slate-500">📦 <strong class="text-white">${Number(prenda.total_unidades).toLocaleString()}</strong> unidades totales</p>
+      ${isAdmin ? `<p class="text-sm text-slate-500">📦 <strong class="text-white">${Number(prenda.total_unidades).toLocaleString()}</strong> unidades totales en el pedido</p>` : ''}
       ${isAdmin ? `
       <div class="mt-3 pt-3 border-t border-zinc-800 flex items-center gap-2 flex-wrap">
         ${nextStatus ? `<button onclick="updatePrendaStatus('${prenda.id}','${nextStatus}')"
@@ -341,28 +341,91 @@ function renderAsignacionesAdmin(asigs, container) {
           <p class="text-slate-500 text-xs">${escHtml(g.phone||'')}</p>
         </div>
       </div>
-      ${g.items.map(a => `
-        <div class="px-4 py-3 border-b border-zinc-900/80 last:border-0">
-          <div class="flex items-start justify-between gap-2">
-            <div class="min-w-0">
-              <p class="font-semibold text-white text-sm">${escHtml(a.parte)}</p>
-              ${a.descripcion ? `<p class="text-slate-400 text-xs mt-0.5">${escHtml(a.descripcion)}</p>` : ''}
-              ${a.nota ? `<p class="text-yellow-400/80 text-xs mt-0.5">📝 ${escHtml(a.nota)}</p>` : ''}
+      ${g.items.map(a => {
+        const pendientes = Math.max(0, a.cantidad_asignada - a.cantidad_entregada);
+        const devols     = a.cantidad_devoluciones || 0;
+        const noConf     = a.cantidad_no_confeccionadas || 0;
+        return `
+        <div class="border-b border-zinc-900/80 last:border-0">
+          <!-- VIEW MODE -->
+          <div id="asig-view-${a.id}" class="px-4 py-3">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0 flex-1">
+                <p class="font-semibold text-white text-sm">${escHtml(a.parte)}</p>
+                ${a.descripcion ? `<p class="text-slate-400 text-xs mt-0.5">${escHtml(a.descripcion)}</p>` : ''}
+                ${a.nota ? `<p class="text-yellow-400/80 text-xs mt-0.5">📝 Admin: ${escHtml(a.nota)}</p>` : ''}
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <button onclick="toggleAsigEdit('${a.id}')"
+                  class="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-slate-300 border border-zinc-700">
+                  ✏️
+                </button>
+                <button onclick="confirmDeleteAsig('${a.id}')" class="text-red-400/40 hover:text-red-400 text-xl px-1">×</button>
+              </div>
             </div>
-            <button onclick="confirmDeleteAsig('${a.id}')" class="text-red-400/40 hover:text-red-400 text-xl shrink-0">×</button>
+            <!-- CONTEO VISUAL -->
+            <div class="grid grid-cols-4 gap-1.5 mt-3 text-xs text-center">
+              <div class="bg-zinc-800 rounded-lg p-2">
+                <div class="text-slate-500 mb-0.5">Asignadas</div>
+                <div class="text-white font-bold text-base">${a.cantidad_asignada}</div>
+              </div>
+              <div class="bg-blue-900/30 rounded-lg p-2">
+                <div class="text-blue-400 mb-0.5">En proceso</div>
+                <div class="text-blue-400 font-bold text-base">${a.cantidad_confeccionada}</div>
+              </div>
+              <div class="bg-green-900/30 rounded-lg p-2">
+                <div class="text-green-400 mb-0.5">Terminadas</div>
+                <div class="text-green-400 font-bold text-base">${a.cantidad_entregada}</div>
+              </div>
+              <div class="bg-yellow-900/30 rounded-lg p-2">
+                <div class="text-yellow-500 mb-0.5">Pendientes</div>
+                <div class="text-yellow-400 font-bold text-base">${pendientes}</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5 mt-1.5 text-xs text-center">
+              <div class="bg-red-900/20 rounded-lg p-2 border border-red-900/30">
+                <div class="text-red-400 mb-0.5">🔄 Devoluciones</div>
+                <div class="text-red-400 font-bold text-base">${devols}</div>
+              </div>
+              <div class="bg-zinc-800/60 rounded-lg p-2 border border-zinc-700/40">
+                <div class="text-slate-500 mb-0.5">❌ No conf.</div>
+                <div class="text-slate-400 font-bold text-base">${noConf}</div>
+              </div>
+            </div>
+            ${a.nota_confeccionista ? `<p class="text-blue-300/80 text-xs mt-2">💬 Conf: <em>${escHtml(a.nota_confeccionista)}</em></p>` : ''}
+            ${a.foto_url
+              ? `<img src="${escHtml(a.foto_url)}" onclick="openPhoto('${escHtml(a.foto_url)}')"
+                      class="h-24 w-36 object-cover rounded-xl cursor-pointer mt-2 border border-zinc-700" />`
+              : '<p class="text-slate-600 text-xs mt-2">Sin foto de entrega</p>'}
           </div>
-          <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs">
-            <span class="text-slate-400">Asignadas: <strong class="text-white">${a.cantidad_asignada}</strong></span>
-            <span class="text-slate-400">Confeccionadas: <strong class="text-blue-400">${a.cantidad_confeccionada}</strong></span>
-            <span class="text-slate-400">Entregadas: <strong class="text-green-400">${a.cantidad_entregada}</strong></span>
-            <span class="text-slate-400">Pendientes: <strong class="text-yellow-400">${Math.max(0, a.cantidad_asignada - a.cantidad_entregada)}</strong></span>
+          <!-- EDIT MODE -->
+          <div id="asig-edit-${a.id}" class="hidden px-4 py-4 bg-zinc-900/60 border-t border-zinc-800">
+            <p class="text-xs text-gold-400 font-semibold mb-3">✏️ Editar asignación</p>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label class="text-xs text-slate-400 mb-1 block">Unidades asignadas</label>
+                <input type="number" id="edit-asig-cant-${a.id}" value="${a.cantidad_asignada}" min="1"
+                  class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-xl font-bold text-center focus:outline-none focus:border-gold-500" />
+              </div>
+              <div>
+                <label class="text-xs text-slate-400 mb-1 block">🔄 Devoluciones</label>
+                <input type="number" id="edit-asig-devols-${a.id}" value="${devols}" min="0"
+                  class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-red-900/50 text-white text-xl font-bold text-center focus:outline-none focus:border-red-500" />
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="saveAdminAsigEdit('${a.id}')"
+                class="flex-1 py-2.5 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-xl text-sm transition-colors">
+                💾 Guardar cambios
+              </button>
+              <button onclick="toggleAsigEdit('${a.id}')"
+                class="px-4 py-2.5 border border-zinc-700 rounded-xl text-slate-400 text-sm">
+                Cancelar
+              </button>
+            </div>
           </div>
-          ${a.nota_confeccionista ? `<p class="text-blue-300/80 text-xs mt-2">💬 <em>${escHtml(a.nota_confeccionista)}</em></p>` : ''}
-          ${a.foto_url
-            ? `<img src="${escHtml(a.foto_url)}" onclick="openPhoto('${escHtml(a.foto_url)}')"
-                    class="h-24 w-36 object-cover rounded-xl cursor-pointer mt-2 border border-zinc-700" />`
-            : '<p class="text-slate-600 text-xs mt-2">Sin foto de entrega</p>'}
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
     </div>`).join('');
 
   if (!html) html = `<p class="text-center text-slate-500 text-sm py-8">Aún no hay asignaciones.<br>Usa el botón de abajo para agregar.</p>`;
@@ -381,32 +444,64 @@ function renderAsignacionesConf(asigs, container) {
     container.innerHTML = `<p class="text-center text-slate-500 text-sm py-8">No tienes asignaciones para esta prenda.</p>`;
     return;
   }
-  container.innerHTML = asigs.map(a => `
+  container.innerHTML = asigs.map(a => {
+    const devols     = a.cantidad_devoluciones || 0;
+    const noConf     = a.cantidad_no_confeccionadas || 0;
+    const pendientes = Math.max(0, a.cantidad_asignada - a.cantidad_entregada);
+    return `
     <div class="card p-4 mb-3">
       <p class="font-bold text-white text-base mb-0.5">${escHtml(a.parte)}</p>
       ${a.descripcion ? `<p class="text-slate-400 text-sm">${escHtml(a.descripcion)}</p>` : ''}
-      ${a.nota ? `<p class="text-yellow-400/80 text-sm mt-1">📝 ${escHtml(a.nota)}</p>` : ''}
+      ${a.nota ? `<p class="text-yellow-400/80 text-sm mt-1">📝 Nota del admin: ${escHtml(a.nota)}</p>` : ''}
 
+      <!-- BALANCE VISUAL -->
+      <div class="grid grid-cols-2 gap-2 mt-3 text-xs text-center">
+        <div class="bg-zinc-800 rounded-xl p-2.5">
+          <div class="text-slate-500 mb-1">📦 Asignadas</div>
+          <div class="text-white font-bold text-2xl">${a.cantidad_asignada}</div>
+        </div>
+        <div class="bg-yellow-900/20 rounded-xl p-2.5 border border-yellow-900/30">
+          <div class="text-yellow-500 mb-1">⏳ Pendientes</div>
+          <div id="pend-${a.id}" class="text-yellow-400 font-bold text-2xl">${pendientes}</div>
+        </div>
+        <div class="bg-blue-900/20 rounded-xl p-2.5 border border-blue-900/30">
+          <div class="text-blue-400 mb-1">🔧 En proceso</div>
+          <div class="text-blue-400 font-bold text-2xl">${a.cantidad_confeccionada}</div>
+        </div>
+        <div class="bg-green-900/20 rounded-xl p-2.5 border border-green-900/30">
+          <div class="text-green-400 mb-1">✅ Terminadas</div>
+          <div class="text-green-400 font-bold text-2xl">${a.cantidad_entregada}</div>
+        </div>
+        ${devols > 0 ? `
+        <div class="col-span-2 bg-red-900/20 rounded-xl p-2.5 border border-red-900/40">
+          <div class="text-red-400 mb-1">🔄 Devoluciones del admin</div>
+          <div class="text-red-400 font-bold text-xl">${devols} <span class="text-xs font-normal text-red-400/70">prendas con imperfectos</span></div>
+        </div>` : ''}
+      </div>
+
+      <!-- CAMPOS EDITABLES -->
       <div class="bg-zinc-900 rounded-xl p-4 mt-3 border border-zinc-800 space-y-3">
-        <p class="text-xs text-slate-500">Total asignadas: <strong class="text-white text-sm">${a.cantidad_asignada}</strong></p>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="text-xs text-slate-400 mb-1 block">Confeccionadas</label>
+            <label class="text-xs text-slate-400 mb-1 block">🔧 En proceso</label>
             <input type="number" id="inp-conf-${a.id}" value="${a.cantidad_confeccionada}"
                    min="0" max="${a.cantidad_asignada}"
                    oninput="calcPendientes('${a.id}',${a.cantidad_asignada})"
                    class="w-full px-3 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-xl font-bold text-center focus:outline-none focus:border-gold-500" />
           </div>
           <div>
-            <label class="text-xs text-slate-400 mb-1 block">Entregadas</label>
+            <label class="text-xs text-slate-400 mb-1 block">✅ Terminadas</label>
             <input type="number" id="inp-entr-${a.id}" value="${a.cantidad_entregada}"
                    min="0" max="${a.cantidad_asignada}"
                    oninput="calcPendientes('${a.id}',${a.cantidad_asignada})"
                    class="w-full px-3 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-xl font-bold text-center focus:outline-none focus:border-gold-500" />
           </div>
         </div>
-        <div class="flex items-center justify-between text-sm">
-          <span class="text-slate-500">Pendientes: <strong id="pend-${a.id}" class="text-yellow-400">${Math.max(0, a.cantidad_asignada - a.cantidad_entregada)}</strong></span>
+        <div>
+          <label class="text-xs text-slate-400 mb-1 block">❌ No pude confeccionar</label>
+          <input type="number" id="inp-noconf-${a.id}" value="${noConf}"
+                 min="0" max="${a.cantidad_asignada}"
+                 class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700/60 text-white text-lg font-bold text-center focus:outline-none focus:border-red-500" />
         </div>
         <div>
           <label class="text-xs text-slate-400 mb-1 block">📝 Mi nota</label>
@@ -427,7 +522,8 @@ function renderAsignacionesConf(asigs, container) {
                  onchange="handlePhotoUpload('${a.id}', this)" />
         </label>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function calcPendientes(asigId, total) {
@@ -519,16 +615,39 @@ async function saveNewAsignacion() {
 async function saveAsignacionProgress(asigId) {
   const confeccionada    = parseInt(document.getElementById(`inp-conf-${asigId}`)?.value) || 0;
   const entregada        = parseInt(document.getElementById(`inp-entr-${asigId}`)?.value) || 0;
+  const noConf           = parseInt(document.getElementById(`inp-noconf-${asigId}`)?.value) || 0;
   const notaConf         = document.getElementById(`inp-nota-${asigId}`)?.value || '';
 
   const { error } = await sb.from('asignaciones').update({
-    cantidad_confeccionada: confeccionada,
-    cantidad_entregada:     entregada,
-    nota_confeccionista:    notaConf
+    cantidad_confeccionada:      confeccionada,
+    cantidad_entregada:          entregada,
+    cantidad_no_confeccionadas:  noConf,
+    nota_confeccionista:         notaConf
   }).eq('id', asigId);
 
   if (error) { showToast('Error al guardar', 'error'); return; }
   showToast('✅ Progreso guardado');
+  await loadPrendaDetail(state.currentPrenda.id, false);
+}
+
+function toggleAsigEdit(asigId) {
+  document.getElementById(`asig-view-${asigId}`)?.classList.toggle('hidden');
+  document.getElementById(`asig-edit-${asigId}`)?.classList.toggle('hidden');
+}
+
+async function saveAdminAsigEdit(asigId) {
+  const cantidad = parseInt(document.getElementById(`edit-asig-cant-${asigId}`)?.value) || 0;
+  const devols   = parseInt(document.getElementById(`edit-asig-devols-${asigId}`)?.value) || 0;
+
+  if (cantidad < 1) { showToast('La cantidad debe ser mayor a 0', 'error'); return; }
+
+  const { error } = await sb.from('asignaciones').update({
+    cantidad_asignada:     cantidad,
+    cantidad_devoluciones: devols
+  }).eq('id', asigId);
+
+  if (error) { showToast('Error al guardar', 'error'); console.error(error); return; }
+  showToast('✅ Asignación actualizada');
   await loadPrendaDetail(state.currentPrenda.id, false);
 }
 
