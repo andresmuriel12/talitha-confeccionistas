@@ -24,6 +24,9 @@ const state = {
   confeccionistas:     [],
   currentPrenda:       null,
   currentAsignaciones: [],
+  currentFotos:        {},
+  exportPrendas:       [],
+  exportAsignaciones:  [],
   currentFilter:       'todas',
   currentNav:          'view-prendas',
   prevView:            null,
@@ -187,13 +190,29 @@ async function setupUI() {
 // ================================================================
 // 7. REALTIME
 // ================================================================
+
+// Evita que una actualización en tiempo real (de otro usuario) sobrescriba
+// el formulario mientras el usuario actual está escribiendo o tiene un panel
+// de edición abierto — protege contra pérdida de datos con varios usuarios
+// trabajando en la misma prenda al mismo tiempo.
+function hasActiveEditing() {
+  const cont = document.getElementById('detail-asignaciones-list');
+  if (!cont) return false;
+  const active = document.activeElement;
+  if (active && cont.contains(active) && ['INPUT','TEXTAREA'].includes(active.tagName)) return true;
+  return !!cont.querySelector('[id^="asig-edit-"]:not(.hidden)');
+}
+
 function setupRealtime() {
   if (state.realtimeSub) sb.removeChannel(state.realtimeSub);
   state.realtimeSub = sb.channel('conf-realtime')
     .on('postgres_changes', { event:'*', schema:'public', table:'prendas' }, () => loadPrendas())
     .on('postgres_changes', { event:'*', schema:'public', table:'asignaciones' }, async () => {
       await loadPrendas();
-      if (state.currentPrenda) await loadPrendaDetail(state.currentPrenda.id, false);
+      if (state.currentPrenda && !hasActiveEditing()) await loadPrendaDetail(state.currentPrenda.id, false);
+    })
+    .on('postgres_changes', { event:'*', schema:'public', table:'asignacion_fotos' }, async () => {
+      if (state.currentPrenda && !hasActiveEditing()) await loadPrendaDetail(state.currentPrenda.id, false);
     })
     .subscribe();
 }
@@ -236,8 +255,22 @@ async function loadPrendaDetail(prendaId, navigate = true) {
     .eq('prenda_id', prendaId)
     .order('created_at');
 
+  // Cargar fotos múltiples de todas las asignaciones de esta prenda
+  const fotosPorAsig = {};
+  const asigIds = (asigs || []).map(a => a.id);
+  if (asigIds.length) {
+    const { data: fotos } = await sb.from('asignacion_fotos')
+      .select('*')
+      .in('asignacion_id', asigIds)
+      .order('created_at');
+    (fotos || []).forEach(f => {
+      (fotosPorAsig[f.asignacion_id] ||= []).push(f);
+    });
+  }
+
   state.currentPrenda       = prenda;
   state.currentAsignaciones = asigs || [];
+  state.currentFotos        = fotosPorAsig;
   renderPrendaDetail();
   if (navigate) showDetailView('view-prenda-detail', state.currentNav);
 }
@@ -314,12 +347,65 @@ function renderPrendaDetail() {
         <button onclick="confirmDeletePrenda('${prenda.id}')"
           class="text-xs text-red-400 hover:text-red-300 ml-auto">🗑 Eliminar prenda</button>
       </div>` : ''}
-    </div>`;
+    </div>
+    ${isAdmin ? renderTableroGeneral(prenda, asigs) : ''}`;
 
   const container = document.getElementById('detail-asignaciones-list');
   isAdmin
     ? renderAsignacionesAdmin(asigs, container)
     : renderAsignacionesConf(asigs.filter(a => a.confeccionista_id === state.user.id), container);
+}
+
+// ================================================================
+// 10b. TABLERO GENERAL DEL PEDIDO (resumen sobre el total)
+// ================================================================
+function calcPrendaStats(prenda, asigs) {
+  const total = Number(prenda.total_unidades) || 0;
+  let asignadas = 0, confirmadas = 0, devoluciones = 0, noConfAprobadas = 0;
+  asigs.forEach(a => {
+    asignadas    += Number(a.cantidad_asignada) || 0;
+    confirmadas  += Number(a.cantidad_confirmada) || 0;
+    devoluciones += Number(a.cantidad_devoluciones) || 0;
+    if (a.no_conf_estado === 'aprobado') noConfAprobadas += Number(a.cantidad_no_confeccionadas) || 0;
+  });
+  const confirmadasNetas = Math.max(0, confirmadas - devoluciones);
+  const totalAjustado    = Math.max(0, total - noConfAprobadas);
+  const pendientes       = Math.max(0, totalAjustado - confirmadasNetas);
+  const avance           = totalAjustado > 0 ? Math.round((confirmadasNetas / totalAjustado) * 100) : 0;
+  return { total, asignadas, confirmadas, devoluciones, confirmadasNetas, noConfAprobadas, totalAjustado, pendientes, avance };
+}
+
+function renderTableroGeneral(prenda, asigs) {
+  const s = calcPrendaStats(prenda, asigs);
+  return `
+  <div class="card p-4 mb-3">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-xs text-slate-500 font-medium">📊 Resumen del pedido — ${s.total.toLocaleString()} unidades</p>
+      <span class="text-xs font-bold text-gold-400">${s.avance}% completado</span>
+    </div>
+    <div class="w-full h-3 bg-zinc-800 rounded-full overflow-hidden mb-3">
+      <div class="h-full bg-gradient-to-r from-gold-600 to-gold-400 rounded-full transition-all duration-500" style="width:${s.avance}%"></div>
+    </div>
+    <div class="grid grid-cols-2 gap-2 text-xs text-center">
+      <div class="bg-zinc-800 rounded-xl p-2.5">
+        <div class="text-slate-500 mb-0.5">👷 Asignadas</div>
+        <div class="text-white font-bold text-lg">${s.asignadas}</div>
+      </div>
+      <div class="bg-green-900/20 rounded-xl p-2.5 border border-green-900/30">
+        <div class="text-green-400 mb-0.5">✅ Confirmadas (netas)</div>
+        <div class="text-green-400 font-bold text-lg">${s.confirmadasNetas}</div>
+      </div>
+      <div class="bg-zinc-800/60 rounded-xl p-2.5 border border-zinc-700/40">
+        <div class="text-slate-400 mb-0.5">❌ No conf. (aprobadas)</div>
+        <div class="text-slate-300 font-bold text-lg">${s.noConfAprobadas}</div>
+      </div>
+      <div class="bg-yellow-900/20 rounded-xl p-2.5 border border-yellow-900/30">
+        <div class="text-yellow-500 mb-0.5">⏳ Pendientes</div>
+        <div class="text-yellow-400 font-bold text-lg">${s.pendientes}</div>
+      </div>
+    </div>
+    ${s.devoluciones > 0 ? `<p class="text-xs text-red-400/80 mt-2">🔄 ${s.devoluciones} unidades en devolución (ya descontadas de las confirmadas netas)</p>` : ''}
+  </div>`;
 }
 
 function renderAsignacionesAdmin(asigs, container) {
@@ -392,11 +478,61 @@ function renderAsignacionesAdmin(asigs, container) {
                 <div class="text-slate-400 font-bold text-base">${noConf}</div>
               </div>
             </div>
+
+            <!-- CONFIRMACIÓN DE ENTREGA -->
+            ${(() => {
+              const reportado    = a.cantidad_entregada;
+              const confirmado   = a.cantidad_confirmada || 0;
+              const porConfirmar = Math.max(0, reportado - confirmado);
+              if (porConfirmar > 0) {
+                return `
+                <div class="mt-2 p-3 bg-gold-500/5 border border-gold-500/20 rounded-xl">
+                  <p class="text-xs text-gold-400/90 mb-2">📦 El confeccionista reportó <strong>${reportado}</strong> terminadas
+                    · confirmadas: <strong>${confirmado}</strong> · por confirmar: <strong>${porConfirmar}</strong></p>
+                  <div class="flex gap-2">
+                    <input type="number" id="confirm-cant-${a.id}" value="${porConfirmar}" min="1" max="${porConfirmar}"
+                           class="w-20 px-2 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-center font-bold text-sm focus:outline-none focus:border-gold-500" />
+                    <button onclick="confirmarEntrega('${a.id}')"
+                            class="flex-1 py-2 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-lg text-xs transition-colors">
+                      ✅ Confirmar recibido
+                    </button>
+                  </div>
+                </div>`;
+              } else if (confirmado > 0) {
+                return `<p class="text-xs text-green-400/70 mt-2">✅ ${confirmado} unidades confirmadas y recibidas</p>`;
+              }
+              return '';
+            })()}
+
+            <!-- APROBACIÓN DE "NO PUDE CONFECCIONAR" -->
+            ${noConf > 0 ? `
+            <div class="mt-2 p-3 rounded-xl border ${
+              a.no_conf_estado === 'aprobado' ? 'bg-green-900/10 border-green-900/30' :
+              a.no_conf_estado === 'rechazado' ? 'bg-zinc-800/40 border-zinc-700/40' :
+              'bg-red-500/5 border-red-500/20'}">
+              <p class="text-xs ${a.no_conf_estado === 'aprobado' ? 'text-green-400/90' : a.no_conf_estado === 'rechazado' ? 'text-slate-400' : 'text-red-400/90'} mb-2">
+                ❌ El confeccionista reportó <strong>${noConf}</strong> unidades que no pudo confeccionar.
+                ${a.no_conf_estado === 'pendiente' ? ' ¿Apruebas que se descuenten del total del pedido?' : ''}
+                ${a.no_conf_estado === 'aprobado' ? ' <strong>✓ Aprobado</strong> — ya se descontaron del total.' : ''}
+                ${a.no_conf_estado === 'rechazado' ? ' <strong>✕ Rechazado</strong> — siguen pendientes por entregar.' : ''}
+              </p>
+              ${a.no_conf_estado === 'pendiente' ? `
+              <div class="flex gap-2">
+                <button onclick="resolverNoConfeccionado('${a.id}','aprobado')"
+                  class="flex-1 py-2 bg-green-700 hover:bg-green-600 text-white font-bold rounded-lg text-xs transition-colors">
+                  ✓ Aprobar
+                </button>
+                <button onclick="resolverNoConfeccionado('${a.id}','rechazado')"
+                  class="flex-1 py-2 bg-zinc-700 hover:bg-zinc-600 text-white font-bold rounded-lg text-xs transition-colors">
+                  ✕ Rechazar
+                </button>
+              </div>` : `
+              <button onclick="resolverNoConfeccionado('${a.id}','pendiente')"
+                class="text-xs text-slate-500 hover:text-slate-300 underline">Revisar de nuevo</button>`}
+            </div>` : ''}
+
             ${a.nota_confeccionista ? `<p class="text-blue-300/80 text-xs mt-2">💬 Conf: <em>${escHtml(a.nota_confeccionista)}</em></p>` : ''}
-            ${a.foto_url
-              ? `<img src="${escHtml(a.foto_url)}" onclick="openPhoto('${escHtml(a.foto_url)}')"
-                      class="h-24 w-36 object-cover rounded-xl cursor-pointer mt-2 border border-zinc-700" />`
-              : '<p class="text-slate-600 text-xs mt-2">Sin foto de entrega</p>'}
+            ${renderFotosGaleria(a.id, true)}
           </div>
           <!-- EDIT MODE -->
           <div id="asig-edit-${a.id}" class="hidden px-4 py-4 bg-zinc-900/60 border-t border-zinc-800">
@@ -511,17 +647,7 @@ function renderAsignacionesConf(asigs, container) {
         <button onclick="saveAsignacionProgress('${a.id}')" class="btn-gold py-3">💾 Guardar progreso</button>
       </div>
 
-      <div class="mt-3 pt-3 border-t border-zinc-800">
-        <p class="text-xs text-slate-500 mb-2">📸 Foto del trabajo terminado</p>
-        ${a.foto_url ? `<img src="${escHtml(a.foto_url)}" onclick="openPhoto('${escHtml(a.foto_url)}')"
-              class="w-full h-44 object-cover rounded-xl cursor-pointer mb-3 border border-zinc-700" />` : ''}
-        <label class="flex items-center justify-center gap-2 w-full py-3 border border-zinc-700 hover:border-gold-500
-                      rounded-xl text-sm text-slate-400 hover:text-gold-400 cursor-pointer transition-colors">
-          📸 ${a.foto_url ? 'Cambiar foto' : 'Subir foto del trabajo'}
-          <input type="file" accept="image/*" capture="environment" class="hidden"
-                 onchange="handlePhotoUpload('${a.id}', this)" />
-        </label>
-      </div>
+      ${renderFotosGaleria(a.id, false)}
     </div>`;
   }).join('');
 }
@@ -651,6 +777,60 @@ async function saveAdminAsigEdit(asigId) {
   await loadPrendaDetail(state.currentPrenda.id, false);
 }
 
+// ---- Confirmación de entrega física por el admin ----
+// Usa control de concurrencia optimista (compara cantidad_confirmada en el WHERE)
+// para evitar que dos administradores confirmando al mismo tiempo se "pisen"
+// el conteo (lost update). Si la fila cambió entre la lectura y la escritura,
+// no se aplica el cambio y se recarga para que el admin reintente con datos frescos.
+const _accionesEnCurso = new Set();
+async function confirmarEntrega(asigId) {
+  if (_accionesEnCurso.has(`confirmar-${asigId}`)) return; // evita doble clic / doble envío
+  _accionesEnCurso.add(`confirmar-${asigId}`);
+  try {
+    const input    = document.getElementById(`confirm-cant-${asigId}`);
+    const cantidad = parseInt(input?.value) || 0;
+    if (cantidad < 1) { showToast('Ingresa una cantidad válida', 'error'); return; }
+
+    const asig = state.currentAsignaciones.find(x => x.id === asigId);
+    if (!asig) return;
+    const reportado    = asig.cantidad_entregada;
+    const confirmado   = asig.cantidad_confirmada || 0;
+    const porConfirmar = Math.max(0, reportado - confirmado);
+    if (cantidad > porConfirmar) { showToast(`Solo puedes confirmar hasta ${porConfirmar}`, 'error'); return; }
+
+    const { data: actualizado, error } = await sb.from('asignaciones')
+      .update({ cantidad_confirmada: confirmado + cantidad })
+      .eq('id', asigId)
+      .eq('cantidad_confirmada', confirmado) // optimistic locking: solo aplica si nadie más cambió el valor
+      .select('id');
+
+    if (error) { showToast('Error al confirmar', 'error'); console.error(error); return; }
+    if (!actualizado || !actualizado.length) {
+      showToast('Otro administrador ya actualizó esta asignación. Recargando datos...', 'warn');
+      await loadPrendaDetail(state.currentPrenda.id, false);
+      return;
+    }
+    showToast(`✅ ${cantidad} unidades confirmadas y recibidas`);
+    await loadPrendaDetail(state.currentPrenda.id, false);
+  } finally {
+    _accionesEnCurso.delete(`confirmar-${asigId}`);
+  }
+}
+
+// ---- Aprobación / rechazo de "no pude confeccionar" ----
+async function resolverNoConfeccionado(asigId, decision) {
+  const { error } = await sb.from('asignaciones')
+    .update({ no_conf_estado: decision })
+    .eq('id', asigId);
+
+  if (error) { showToast('Error al guardar decisión', 'error'); console.error(error); return; }
+  const msg = decision === 'aprobado' ? '✓ Aprobado — se descontó del total'
+            : decision === 'rechazado' ? '✕ Rechazado — sigue pendiente'
+            : 'Marcado para revisión';
+  showToast(msg);
+  await loadPrendaDetail(state.currentPrenda.id, false);
+}
+
 function confirmDeleteAsig(asigId) {
   confirmAction(
     '¿Eliminar asignación?',
@@ -665,25 +845,98 @@ function confirmDeleteAsig(asigId) {
 }
 
 // ================================================================
-// 13. FOTO
+// 13. FOTOS MÚLTIPLES (galería con descripción, cámara y galería)
 // ================================================================
-async function handlePhotoUpload(asigId, input) {
+const MAX_FOTOS_ASIG = 4;
+
+function renderFotosGaleria(asigId, isAdmin) {
+  const fotos = state.currentFotos?.[asigId] || [];
+  const puedeSubir = fotos.length < MAX_FOTOS_ASIG;
+
+  const grid = fotos.length ? `
+    <div class="grid grid-cols-2 gap-2 mb-3">
+      ${fotos.map(f => {
+        const puedeBorrar = isAdmin || f.uploaded_by === state.user?.id;
+        return `
+        <div class="relative">
+          <img src="${escHtml(f.foto_url)}" onclick="openPhoto('${escHtml(f.foto_url)}')"
+               class="w-full h-28 object-cover rounded-xl cursor-pointer border border-zinc-700" />
+          ${puedeBorrar ? `
+          <button onclick="event.stopPropagation(); eliminarFoto('${f.id}')"
+            class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/70 hover:bg-red-600 text-white text-xs flex items-center justify-center transition-colors">✕</button>` : ''}
+          ${f.descripcion ? `<p class="text-[11px] text-slate-400 mt-1 leading-snug line-clamp-2">${escHtml(f.descripcion)}</p>` : ''}
+        </div>`;
+      }).join('')}
+    </div>` : `<p class="text-xs text-slate-500 mb-2">Sin fotos todavía.</p>`;
+
+  const uploader = puedeSubir ? `
+    <input type="text" id="foto-desc-${asigId}" placeholder="Descripción de la foto (opcional)"
+           class="w-full px-3 py-2.5 mb-2 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:border-gold-500" />
+    <div class="grid grid-cols-2 gap-2">
+      <label class="flex items-center justify-center gap-1.5 py-2.5 border border-zinc-700 hover:border-gold-500
+                    rounded-xl text-xs text-slate-400 hover:text-gold-400 cursor-pointer transition-colors">
+        📷 Tomar foto
+        <input type="file" accept="image/*" capture="environment" class="hidden"
+               onchange="handleFotoUpload('${asigId}', this)" />
+      </label>
+      <label class="flex items-center justify-center gap-1.5 py-2.5 border border-zinc-700 hover:border-gold-500
+                    rounded-xl text-xs text-slate-400 hover:text-gold-400 cursor-pointer transition-colors">
+        🖼️ Elegir de galería
+        <input type="file" accept="image/*" class="hidden"
+               onchange="handleFotoUpload('${asigId}', this)" />
+      </label>
+    </div>` : `<p class="text-xs text-slate-500 text-center">Máximo de ${MAX_FOTOS_ASIG} fotos alcanzado.</p>`;
+
+  return `
+    <div class="mt-3 pt-3 border-t border-zinc-800">
+      <p class="text-xs text-slate-500 mb-2">📸 Fotos del trabajo (${fotos.length}/${MAX_FOTOS_ASIG})</p>
+      ${grid}
+      ${uploader}
+    </div>`;
+}
+
+async function handleFotoUpload(asigId, input) {
   const file = input.files[0];
   if (!file) return;
+
+  const fotosActuales = state.currentFotos?.[asigId] || [];
+  if (fotosActuales.length >= MAX_FOTOS_ASIG) {
+    showToast(`Máximo ${MAX_FOTOS_ASIG} fotos por asignación`, 'error');
+    input.value = '';
+    return;
+  }
+
   showToast('Subiendo foto...', 'warn');
+  const descripcion = document.getElementById(`foto-desc-${asigId}`)?.value.trim() || '';
 
   const ext  = file.name.split('.').pop() || 'jpg';
   const path = `asignaciones/${asigId}-${Date.now()}.${ext}`;
 
   const { error: upErr } = await sb.storage.from('production-photos').upload(path, file, { upsert: true });
-  if (upErr) { showToast('Error al subir foto', 'error'); return; }
+  if (upErr) { showToast('Error al subir foto', 'error'); console.error(upErr); return; }
 
   const { data: { publicUrl } } = sb.storage.from('production-photos').getPublicUrl(path);
-  const { error } = await sb.from('asignaciones').update({ foto_url: publicUrl }).eq('id', asigId);
-  if (error) { showToast('Error al guardar URL', 'error'); return; }
+  const { error } = await sb.from('asignacion_fotos').insert({
+    asignacion_id: asigId, foto_url: publicUrl, descripcion, uploaded_by: state.user.id
+  });
+  if (error) { showToast('Error al guardar la foto', 'error'); console.error(error); return; }
 
-  showToast('📸 Foto subida');
+  showToast('📸 Foto agregada');
+  input.value = '';
   await loadPrendaDetail(state.currentPrenda.id, false);
+}
+
+function eliminarFoto(fotoId) {
+  confirmAction(
+    '¿Eliminar foto?',
+    'Esta acción no se puede deshacer.',
+    async () => {
+      const { error } = await sb.from('asignacion_fotos').delete().eq('id', fotoId);
+      if (error) { showToast('Error al eliminar la foto', 'error'); return; }
+      showToast('Foto eliminada');
+      await loadPrendaDetail(state.currentPrenda.id, false);
+    }
+  );
 }
 
 // ================================================================
@@ -871,7 +1124,7 @@ function showSection(id) {
 }
 
 function showMainView(viewId) {
-  ['view-prendas','view-prenda-detail','view-users'].forEach(v =>
+  ['view-prendas','view-prenda-detail','view-users','view-export'].forEach(v =>
     document.getElementById(v)?.classList.toggle('active', v === viewId));
 
   document.getElementById('btn-back').classList.add('hidden');
@@ -887,13 +1140,17 @@ function showMainView(viewId) {
     document.getElementById('header-title').textContent = 'Usuarios';
     actionBtn.classList.toggle('hidden', !isAdmin);
     loadUsers();
+  } else if (viewId === 'view-export') {
+    document.getElementById('header-title').textContent = 'Exportar a Excel';
+    actionBtn.classList.add('hidden');
+    loadExportData();
   }
   state.prevView = null;
 }
 
 function showDetailView(viewId, backView) {
   state.prevView = backView;
-  ['view-prendas','view-prenda-detail','view-users'].forEach(v =>
+  ['view-prendas','view-prenda-detail','view-users','view-export'].forEach(v =>
     document.getElementById(v)?.classList.toggle('active', v === viewId));
 
   document.getElementById('btn-back').classList.remove('hidden');
@@ -912,13 +1169,14 @@ function showDetailView(viewId, backView) {
 
 function goBack() {
   const prev = state.prevView || state.currentNav;
-  const btnId = prev === 'view-users' ? 'nav-btn-users' : 'nav-btn-prendas';
+  const btnMap = { 'view-users': 'nav-btn-users', 'view-export': 'nav-btn-export' };
+  const btnId = btnMap[prev] || 'nav-btn-prendas';
   switchNav(prev, btnId);
 }
 
 function switchNav(viewId, btnId) {
   state.currentNav = viewId;
-  ['nav-btn-prendas','nav-btn-users'].forEach(id =>
+  ['nav-btn-prendas','nav-btn-users','nav-btn-export'].forEach(id =>
     document.getElementById(id)?.classList.toggle('active', id === btnId));
   showMainView(viewId);
 }
@@ -935,4 +1193,256 @@ function handleHeaderAction() {
   if (active === 'view-prendas')        openNewPrendaModal();
   else if (active === 'view-prenda-detail') openNewAsignacionModal();
   else if (active === 'view-users')     openNewUserModal();
+}
+
+// ================================================================
+// 17. EXPORTACIÓN A EXCEL
+// ================================================================
+
+// Carga todas las prendas + asignaciones (con confeccionista) para exportar/buscar
+async function loadExportData() {
+  document.getElementById('export-summary').textContent = 'Cargando datos...';
+
+  const { data: prendas, error: pErr } = await sb.from('prendas')
+    .select('*').order('created_at', { ascending: false });
+
+  const { data: asigs, error: aErr } = await sb.from('asignaciones')
+    .select('*, confeccionista:profiles!confeccionista_id(id, full_name, phone)')
+    .order('created_at', { ascending: false });
+
+  if (pErr || aErr) {
+    document.getElementById('export-summary').textContent = 'Error al cargar los datos para exportar.';
+    console.error(pErr || aErr);
+    return;
+  }
+
+  state.exportPrendas     = prendas || [];
+  state.exportAsignaciones = asigs || [];
+  renderExportPreview();
+}
+
+// Filtra prendas/asignaciones según el texto de búsqueda (nombre prenda, nombre confeccionista o fecha)
+function getExportFiltered() {
+  const q = (document.getElementById('export-search')?.value || '').trim().toLowerCase();
+  const prendas = state.exportPrendas || [];
+  const asigs   = state.exportAsignaciones || [];
+
+  if (!q) return { prendas, asigs };
+
+  const matchFecha = (dateStr) => {
+    if (!dateStr) return false;
+    const iso  = dateStr.slice(0, 10);                       // 2026-06-06
+    const corto = formatDate(dateStr).toLowerCase();         // 06 jun 2026
+    const dmy  = new Date(dateStr).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' }); // 06/06/2026
+    return iso.includes(q) || corto.includes(q) || dmy.includes(q);
+  };
+
+  const prendasFiltradas = prendas.filter(p =>
+    (p.nombre || '').toLowerCase().includes(q) || matchFecha(p.created_at)
+  );
+  const idsPrendasFiltradas = new Set(prendasFiltradas.map(p => p.id));
+
+  const asigsFiltradas = asigs.filter(a => {
+    const nombrePrenda = state.exportPrendas.find(p => p.id === a.prenda_id)?.nombre || '';
+    return idsPrendasFiltradas.has(a.prenda_id)
+        || (a.confeccionista?.full_name || '').toLowerCase().includes(q)
+        || (nombrePrenda.toLowerCase().includes(q))
+        || matchFecha(a.created_at);
+  });
+
+  // Incluir también las prendas referenciadas por asignaciones que matchearon por confeccionista/fecha
+  const idsExtra = new Set(asigsFiltradas.map(a => a.prenda_id));
+  const prendasFinal = prendas.filter(p => idsPrendasFiltradas.has(p.id) || idsExtra.has(p.id));
+
+  return { prendas: prendasFinal, asigs: asigsFiltradas };
+}
+
+function renderExportPreview() {
+  const { prendas, asigs } = getExportFiltered();
+  const totalAsignado = asigs.reduce((s, a) => s + (Number(a.cantidad_asignada) || 0), 0);
+  const totalConfirmado = asigs.reduce((s, a) => s + (Number(a.cantidad_confirmada) || 0), 0);
+
+  document.getElementById('export-summary').textContent =
+    `${prendas.length} prenda${prendas.length !== 1 ? 's' : ''} · ${asigs.length} asignación${asigs.length !== 1 ? 'es' : ''} · ` +
+    `${totalAsignado.toLocaleString()} unidades asignadas · ${totalConfirmado.toLocaleString()} confirmadas. ` +
+    `Estos datos serán incluidos en el Excel.`;
+
+  const cont = document.getElementById('export-preview');
+  if (!prendas.length) {
+    cont.innerHTML = `<div class="text-center py-10 text-slate-500 text-sm">Sin resultados para esta búsqueda.</div>`;
+    return;
+  }
+
+  cont.innerHTML = prendas.map(p => {
+    const asigsP = asigs.filter(a => a.prenda_id === p.id);
+    return `
+    <div class="card p-4">
+      <div class="flex items-start justify-between gap-2 mb-1">
+        <h3 class="font-bold text-white text-sm">${escHtml(p.nombre)}</h3>
+        ${statusBadge(p.status)}
+      </div>
+      <p class="text-xs text-slate-500 mb-2">📦 ${Number(p.total_unidades).toLocaleString()} unidades · ${formatDate(p.created_at)}</p>
+      ${asigsP.length ? `
+      <div class="space-y-1.5 mt-2">
+        ${asigsP.map(a => `
+          <div class="flex items-center justify-between text-xs bg-zinc-900 rounded-lg px-3 py-2 border border-zinc-800">
+            <span class="text-slate-300 truncate">🧵 ${escHtml(a.confeccionista?.full_name || 'Sin confeccionista')}</span>
+            <span class="text-slate-500 shrink-0 ml-2">Asignadas: <strong class="text-white">${a.cantidad_asignada}</strong> · Confirmadas: <strong class="text-green-400">${a.cantidad_confirmada}</strong></span>
+          </div>`).join('')}
+      </div>` : `<p class="text-xs text-slate-600">Sin confeccionistas asignados.</p>`}
+    </div>`;
+  }).join('');
+}
+
+// Genera y descarga el archivo .xlsx con varias hojas
+function exportarExcel() {
+  const { prendas, asigs } = getExportFiltered();
+  if (!prendas.length) { showToast('No hay datos para exportar con esta búsqueda', 'error'); return; }
+  if (typeof XLSX === 'undefined') { showToast('No se pudo cargar la librería de Excel', 'error'); return; }
+
+  const fechaHoy = new Date().toISOString().slice(0, 10);
+
+  // ---- Hoja 1: Detalle de asignaciones (asignado vs entregado por confeccionista y prenda) ----
+  const hojaDetalle = asigs.map(a => {
+    const prenda = state.exportPrendas.find(p => p.id === a.prenda_id);
+    const neto   = Math.max(0, (Number(a.cantidad_confirmada)||0) - (Number(a.cantidad_devoluciones)||0));
+    return {
+      'Prenda':                 prenda?.nombre || '',
+      'Confeccionista':         a.confeccionista?.full_name || '',
+      'Teléfono':               a.confeccionista?.phone || '',
+      'Asignadas':              Number(a.cantidad_asignada) || 0,
+      'En proceso':             Number(a.cantidad_confeccionada) || 0,
+      'Terminadas (reportadas)':Number(a.cantidad_entregada) || 0,
+      'Confirmadas por admin':  Number(a.cantidad_confirmada) || 0,
+      'Devoluciones':           Number(a.cantidad_devoluciones) || 0,
+      'Entregado neto':         neto,
+      'No confeccionadas (reportadas)': Number(a.cantidad_no_confeccionadas) || 0,
+      'Estado novedad':         a.no_conf_estado || 'pendiente',
+      'Nota confeccionista':    a.nota_confeccionista || '',
+      'Nota admin':             a.nota || '',
+      'Fecha asignación':       formatDate(a.created_at)
+    };
+  });
+
+  // ---- Hoja 2: Prendas + fechas (resumen por pedido) ----
+  const hojaPrendas = prendas.map(p => {
+    const asigsP = asigs.filter(a => a.prenda_id === p.id);
+    const s = calcPrendaStats(p, state.exportAsignaciones.filter(a => a.prenda_id === p.id));
+    return {
+      'Prenda':                  p.nombre,
+      'Descripción':             p.descripcion || '',
+      'Total unidades pedido':   s.total,
+      'Estado':                  p.status,
+      'Fecha creación':          formatDate(p.created_at),
+      '# Confeccionistas':       asigsP.length,
+      'Total asignado':          s.asignadas,
+      'Total confirmado':        s.confirmadas,
+      'Devoluciones':            s.devoluciones,
+      'Entregado neto':          s.confirmadasNetas,
+      'No confeccionadas aprobadas': s.noConfAprobadas,
+      'Total ajustado':          s.totalAjustado,
+      'Pendientes':              s.pendientes,
+      '% Avance':                s.avance
+    };
+  });
+
+  // ---- Hoja 3: Confeccionistas + avance (agregado por persona) ----
+  const porConfeccionista = {};
+  asigs.forEach(a => {
+    const nombre = a.confeccionista?.full_name || 'Sin confeccionista';
+    if (!porConfeccionista[nombre]) {
+      porConfeccionista[nombre] = {
+        'Confeccionista': nombre,
+        'Teléfono': a.confeccionista?.phone || '',
+        '# Prendas': new Set(),
+        'Total asignado': 0,
+        'En proceso': 0,
+        'Terminadas (reportadas)': 0,
+        'Confirmadas por admin': 0,
+        'Devoluciones': 0,
+        'No confeccionadas (reportadas)': 0
+      };
+    }
+    const c = porConfeccionista[nombre];
+    c['# Prendas'].add(a.prenda_id);
+    c['Total asignado']             += Number(a.cantidad_asignada) || 0;
+    c['En proceso']                 += Number(a.cantidad_confeccionada) || 0;
+    c['Terminadas (reportadas)']    += Number(a.cantidad_entregada) || 0;
+    c['Confirmadas por admin']      += Number(a.cantidad_confirmada) || 0;
+    c['Devoluciones']               += Number(a.cantidad_devoluciones) || 0;
+    c['No confeccionadas (reportadas)'] += Number(a.cantidad_no_confeccionadas) || 0;
+  });
+  const hojaConfeccionistas = Object.values(porConfeccionista).map(c => {
+    const neto   = Math.max(0, c['Confirmadas por admin'] - c['Devoluciones']);
+    const avance = c['Total asignado'] > 0 ? Math.round((neto / c['Total asignado']) * 100) : 0;
+    return {
+      'Confeccionista':            c['Confeccionista'],
+      'Teléfono':                  c['Teléfono'],
+      '# Prendas':                 c['# Prendas'].size,
+      'Total asignado':            c['Total asignado'],
+      'En proceso':                c['En proceso'],
+      'Terminadas (reportadas)':   c['Terminadas (reportadas)'],
+      'Confirmadas por admin':     c['Confirmadas por admin'],
+      'Devoluciones':              c['Devoluciones'],
+      'Entregado neto':            neto,
+      'No confeccionadas (reportadas)': c['No confeccionadas (reportadas)'],
+      '% Avance':                  avance
+    };
+  });
+
+  // ---- Hoja 4: Devoluciones y novedades ----
+  const hojaNovedades = asigs
+    .filter(a => (Number(a.cantidad_devoluciones) > 0) || (Number(a.cantidad_no_confeccionadas) > 0) || a.nota_confeccionista || a.nota)
+    .map(a => {
+      const prenda = state.exportPrendas.find(p => p.id === a.prenda_id);
+      return {
+        'Prenda':              prenda?.nombre || '',
+        'Confeccionista':      a.confeccionista?.full_name || '',
+        'Devoluciones':        Number(a.cantidad_devoluciones) || 0,
+        'No confeccionadas (reportadas)': Number(a.cantidad_no_confeccionadas) || 0,
+        'Estado novedad':      a.no_conf_estado || 'pendiente',
+        'Nota confeccionista': a.nota_confeccionista || '',
+        'Nota admin':          a.nota || '',
+        'Fecha':               formatDate(a.created_at)
+      };
+    });
+
+  // ---- Hoja 5: Totales generales ----
+  let totUnidadesPedidas=0, totAsignado=0, totConfirmado=0, totDevoluciones=0, totNoConfAprob=0, totAjustado=0, totNeto=0;
+  prendas.forEach(p => {
+    const s = calcPrendaStats(p, state.exportAsignaciones.filter(a => a.prenda_id === p.id));
+    totUnidadesPedidas += s.total;
+    totAsignado        += s.asignadas;
+    totConfirmado      += s.confirmadas;
+    totDevoluciones    += s.devoluciones;
+    totNoConfAprob     += s.noConfAprobadas;
+    totAjustado        += s.totalAjustado;
+    totNeto            += s.confirmadasNetas;
+  });
+  const avanceGlobal = totAjustado > 0 ? Math.round((totNeto / totAjustado) * 100) : 0;
+  const hojaTotales = [{
+    'Generado':                       formatDate(new Date().toISOString()),
+    '# Prendas incluidas':            prendas.length,
+    '# Asignaciones incluidas':       asigs.length,
+    'Total unidades pedidas':         totUnidadesPedidas,
+    'Total asignado a confeccionistas': totAsignado,
+    'Total confirmado por admin':     totConfirmado,
+    'Total devoluciones':             totDevoluciones,
+    'Total no confeccionado (aprobado)': totNoConfAprob,
+    'Total ajustado (pedido - aprobadas)': totAjustado,
+    'Total entregado neto':           totNeto,
+    'Pendientes':                     Math.max(0, totAjustado - totNeto),
+    '% Avance global':                avanceGlobal
+  }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaDetalle),         'Asignado vs Entregado');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaPrendas),         'Prendas');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaConfeccionistas), 'Confeccionistas');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaNovedades.length ? hojaNovedades : [{ 'Sin novedades': 'No hay devoluciones ni reportes pendientes' }]), 'Devoluciones y novedades');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(hojaTotales),         'Totales generales');
+
+  const nombreArchivo = `Talitha_Confeccionistas_${fechaHoy}.xlsx`;
+  XLSX.writeFile(wb, nombreArchivo);
+  showToast('📊 Excel generado y descargado');
 }
