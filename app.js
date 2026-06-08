@@ -994,7 +994,9 @@ function renderUsers() {
           ${u.is_active ? 'Activo' : 'Inactivo'}
         </button>
         <button onclick="confirmDeleteUser('${u.id}','${escHtml(u.full_name||'')}')"
-          class="text-red-400/40 hover:text-red-400 text-xl">×</button>
+          class="text-xs px-3 py-1.5 rounded-lg border border-red-900/50 text-red-400 hover:bg-red-900/20 transition-colors">
+          🗑 Eliminar
+        </button>
       </div>
     </div>`;
   }).join('');
@@ -1064,7 +1066,7 @@ function confirmDeleteUser(userId, name) {
         const res = await fetch(`${EDGE_BASE}/delete-user`, {
           method: 'POST',
           headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${session.access_token}` },
-          body: JSON.stringify({ userId })
+          body: JSON.stringify({ user_id: userId })
         });
         if (!res.ok) throw new Error();
         showToast('Usuario eliminado');
