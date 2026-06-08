@@ -1,7 +1,7 @@
 // ================================================================
 // TALITHA CONFECCIONISTAS — Service Worker
 // ================================================================
-const CACHE_NAME    = 'talitha-conf-v2';
+const CACHE_NAME    = 'talitha-conf-v3';
 const STATIC_ASSETS = [
   '/', '/index.html', '/app.js', '/manifest.json',
   'https://cdn.tailwindcss.com',
