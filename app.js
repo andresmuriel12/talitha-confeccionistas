@@ -388,23 +388,26 @@ function renderTableroGeneral(prenda, asigs) {
     </div>
     <div class="grid grid-cols-2 gap-2 text-xs text-center">
       <div class="bg-zinc-800 rounded-xl p-2.5">
-        <div class="text-slate-500 mb-0.5">👷 Asignadas</div>
+        <div class="text-white mb-0.5">👷 Asignadas</div>
         <div class="text-white font-bold text-lg">${s.asignadas}</div>
       </div>
-      <div class="bg-green-900/20 rounded-xl p-2.5 border border-green-900/30">
-        <div class="text-green-400 mb-0.5">✅ Confirmadas (netas)</div>
-        <div class="text-green-400 font-bold text-lg">${s.confirmadasNetas}</div>
-      </div>
-      <div class="bg-zinc-800/60 rounded-xl p-2.5 border border-zinc-700/40">
-        <div class="text-slate-400 mb-0.5">❌ No conf. (aprobadas)</div>
-        <div class="text-slate-300 font-bold text-lg">${s.noConfAprobadas}</div>
-      </div>
-      <div class="bg-yellow-900/20 rounded-xl p-2.5 border border-yellow-900/30">
+      <div class="bg-zinc-800 rounded-xl p-2.5">
         <div class="text-yellow-500 mb-0.5">⏳ Pendientes</div>
-        <div class="text-yellow-400 font-bold text-lg">${s.pendientes}</div>
+        <div class="text-white font-bold text-lg">${s.pendientes}</div>
+      </div>
+      <div class="bg-zinc-800 rounded-xl p-2.5">
+        <div class="text-slate-400 mb-0.5">❌ No conf. (aprobadas)</div>
+        <div class="text-white font-bold text-lg">${s.noConfAprobadas}</div>
+      </div>
+      <div class="bg-zinc-800 rounded-xl p-2.5">
+        <div class="text-red-400 mb-0.5">🔄 Devoluciones</div>
+        <div class="text-white font-bold text-lg">${s.devoluciones}</div>
+      </div>
+      <div class="col-span-2 bg-zinc-800 rounded-xl p-2.5">
+        <div class="text-green-400 mb-0.5">✅ Confirmadas (netas)</div>
+        <div class="text-white font-bold text-lg">${s.confirmadasNetas}</div>
       </div>
     </div>
-    ${s.devoluciones > 0 ? `<p class="text-xs text-red-400/80 mt-2">🔄 ${s.devoluciones} unidades en devolución (ya descontadas de las confirmadas netas)</p>` : ''}
   </div>`;
 }
 
@@ -452,30 +455,30 @@ function renderAsignacionesAdmin(asigs, container) {
             <!-- CONTEO VISUAL -->
             <div class="grid grid-cols-4 gap-1.5 mt-3 text-xs text-center">
               <div class="bg-zinc-800 rounded-lg p-2">
-                <div class="text-slate-500 mb-0.5">Asignadas</div>
+                <div class="text-white mb-0.5">Asignadas</div>
                 <div class="text-white font-bold text-base">${a.cantidad_asignada}</div>
               </div>
-              <div class="bg-blue-900/30 rounded-lg p-2">
+              <div class="bg-zinc-800 rounded-lg p-2">
                 <div class="text-blue-400 mb-0.5">En proceso</div>
-                <div class="text-blue-400 font-bold text-base">${a.cantidad_confeccionada}</div>
+                <div class="text-white font-bold text-base">${a.cantidad_confeccionada}</div>
               </div>
-              <div class="bg-green-900/30 rounded-lg p-2">
-                <div class="text-green-400 mb-0.5">Terminadas</div>
-                <div class="text-green-400 font-bold text-base">${a.cantidad_entregada}</div>
-              </div>
-              <div class="bg-yellow-900/30 rounded-lg p-2">
+              <div class="bg-zinc-800 rounded-lg p-2">
                 <div class="text-yellow-500 mb-0.5">Pendientes</div>
-                <div class="text-yellow-400 font-bold text-base">${pendientes}</div>
+                <div class="text-white font-bold text-base">${pendientes}</div>
+              </div>
+              <div class="bg-zinc-800 rounded-lg p-2">
+                <div class="text-green-400 mb-0.5">Terminadas</div>
+                <div class="text-white font-bold text-base">${a.cantidad_entregada}</div>
               </div>
             </div>
             <div class="grid grid-cols-2 gap-1.5 mt-1.5 text-xs text-center">
-              <div class="bg-red-900/20 rounded-lg p-2 border border-red-900/30">
+              <div class="bg-zinc-800 rounded-lg p-2">
                 <div class="text-red-400 mb-0.5">🔄 Devoluciones</div>
-                <div class="text-red-400 font-bold text-base">${devols}</div>
+                <div class="text-white font-bold text-base">${devols}</div>
               </div>
-              <div class="bg-zinc-800/60 rounded-lg p-2 border border-zinc-700/40">
+              <div class="bg-zinc-800 rounded-lg p-2">
                 <div class="text-slate-500 mb-0.5">❌ No conf.</div>
-                <div class="text-slate-400 font-bold text-base">${noConf}</div>
+                <div class="text-white font-bold text-base">${noConf}</div>
               </div>
             </div>
 
@@ -488,7 +491,7 @@ function renderAsignacionesAdmin(asigs, container) {
                 return `
                 <div class="mt-2 p-3 bg-gold-500/5 border border-gold-500/20 rounded-xl">
                   <p class="text-xs text-gold-400/90 mb-2">📦 El confeccionista reportó <strong>${reportado}</strong> terminadas
-                    · confirmadas: <strong>${confirmado}</strong> · por confirmar: <strong>${porConfirmar}</strong></p>
+                    · confirmadas: <strong>${confirmado}</strong> · por confirmar: <strong>${porConfirmar}</strong>${a.fecha_entrega ? ` · <span class="text-slate-400">Fecha entrega: ${formatDate(a.fecha_entrega)}</span>` : ''}</p>
                   <div class="flex gap-2">
                     <input type="number" id="confirm-cant-${a.id}" value="${porConfirmar}" min="1" max="${porConfirmar}"
                            class="w-20 px-2 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-center font-bold text-sm focus:outline-none focus:border-gold-500" />
@@ -593,26 +596,25 @@ function renderAsignacionesConf(asigs, container) {
       <!-- BALANCE VISUAL -->
       <div class="grid grid-cols-2 gap-2 mt-3 text-xs text-center">
         <div class="bg-zinc-800 rounded-xl p-2.5">
-          <div class="text-slate-500 mb-1">📦 Asignadas</div>
+          <div class="text-white mb-1">📦 Asignadas</div>
           <div class="text-white font-bold text-2xl">${a.cantidad_asignada}</div>
         </div>
-        <div class="bg-yellow-900/20 rounded-xl p-2.5 border border-yellow-900/30">
-          <div class="text-yellow-500 mb-1">⏳ Pendientes</div>
-          <div id="pend-${a.id}" class="text-yellow-400 font-bold text-2xl">${pendientes}</div>
-        </div>
-        <div class="bg-blue-900/20 rounded-xl p-2.5 border border-blue-900/30">
+        <div class="bg-zinc-800 rounded-xl p-2.5">
           <div class="text-blue-400 mb-1">🔧 En proceso</div>
-          <div class="text-blue-400 font-bold text-2xl">${a.cantidad_confeccionada}</div>
+          <div class="text-white font-bold text-2xl">${a.cantidad_confeccionada}</div>
         </div>
-        <div class="bg-green-900/20 rounded-xl p-2.5 border border-green-900/30">
+        <div class="bg-zinc-800 rounded-xl p-2.5">
           <div class="text-green-400 mb-1">✅ Terminadas</div>
-          <div class="text-green-400 font-bold text-2xl">${a.cantidad_entregada}</div>
+          <div class="text-white font-bold text-2xl">${a.cantidad_entregada}</div>
         </div>
-        ${devols > 0 ? `
-        <div class="col-span-2 bg-red-900/20 rounded-xl p-2.5 border border-red-900/40">
-          <div class="text-red-400 mb-1">🔄 Devoluciones del admin</div>
-          <div class="text-red-400 font-bold text-xl">${devols} <span class="text-xs font-normal text-red-400/70">prendas con imperfectos</span></div>
-        </div>` : ''}
+        <div class="bg-zinc-800 rounded-xl p-2.5">
+          <div class="text-yellow-500 mb-1">⏳ Pendientes</div>
+          <div id="pend-${a.id}" class="text-white font-bold text-2xl">${pendientes}</div>
+        </div>
+        <div class="col-span-2 bg-zinc-800 rounded-xl p-2.5">
+          <div class="text-red-400 mb-1">🔄 Devoluciones</div>
+          <div class="text-white font-bold text-xl">${devols}</div>
+        </div>
       </div>
 
       <!-- CAMPOS EDITABLES -->
@@ -638,6 +640,11 @@ function renderAsignacionesConf(asigs, container) {
           <input type="number" id="inp-noconf-${a.id}" value="${noConf}"
                  min="0" max="${a.cantidad_asignada}"
                  class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700/60 text-white text-lg font-bold text-center focus:outline-none focus:border-red-500" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-400 mb-1 block">📅 Fecha de entrega</label>
+          <input type="date" id="inp-fecha-${a.id}" value="${a.fecha_entrega ? a.fecha_entrega.slice(0,10) : ''}"
+            class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:border-gold-500" />
         </div>
         <div>
           <label class="text-xs text-slate-400 mb-1 block">📝 Mi nota</label>
@@ -743,12 +750,15 @@ async function saveAsignacionProgress(asigId) {
   const entregada        = parseInt(document.getElementById(`inp-entr-${asigId}`)?.value) || 0;
   const noConf           = parseInt(document.getElementById(`inp-noconf-${asigId}`)?.value) || 0;
   const notaConf         = document.getElementById(`inp-nota-${asigId}`)?.value || '';
+  const fechaRaw         = document.getElementById(`inp-fecha-${asigId}`)?.value || '';
+  const fechaEntrega     = fechaRaw ? new Date(fechaRaw).toISOString() : null;
 
   const { error } = await sb.from('asignaciones').update({
     cantidad_confeccionada:      confeccionada,
     cantidad_entregada:          entregada,
     cantidad_no_confeccionadas:  noConf,
-    nota_confeccionista:         notaConf
+    nota_confeccionista:         notaConf,
+    fecha_entrega:               fechaEntrega
   }).eq('id', asigId);
 
   if (error) { showToast('Error al guardar', 'error'); return; }
@@ -1221,13 +1231,33 @@ async function loadExportData() {
   renderExportPreview();
 }
 
-// Filtra prendas/asignaciones según el texto de búsqueda (nombre prenda, nombre confeccionista o fecha)
+// Determina el "estado" de una asignación para los filtros de exportación
+function getAsigEstado(a) {
+  const entregada   = Number(a.cantidad_entregada) || 0;
+  const confirmada  = Number(a.cantidad_confirmada) || 0;
+  const confeccionada = Number(a.cantidad_confeccionada) || 0;
+  const estados = [];
+  if (entregada === 0 && confeccionada === 0) estados.push('pendiente');
+  if (confeccionada > 0) estados.push('en_proceso');
+  if (entregada > 0 && confirmada < entregada) estados.push('entregada');
+  if (confirmada > 0) estados.push('confirmada');
+  return estados;
+}
+
+// Filtra prendas/asignaciones según el texto de búsqueda y filtros de estado
 function getExportFiltered() {
   const q = (document.getElementById('export-search')?.value || '').trim().toLowerCase();
   const prendas = state.exportPrendas || [];
   const asigs   = state.exportAsignaciones || [];
 
-  if (!q) return { prendas, asigs };
+  // Leer checkboxes de estado
+  const fPend  = document.getElementById('filter-pendiente')?.checked;
+  const fProc  = document.getElementById('filter-en-proceso')?.checked;
+  const fEntr  = document.getElementById('filter-entregada')?.checked;
+  const fConf  = document.getElementById('filter-confirmada')?.checked;
+  const anyFilterActive = fPend || fProc || fEntr || fConf;
+
+  if (!q && !anyFilterActive) return { prendas, asigs };
 
   const matchFecha = (dateStr) => {
     if (!dateStr) return false;
@@ -1237,20 +1267,31 @@ function getExportFiltered() {
     return iso.includes(q) || corto.includes(q) || dmy.includes(q);
   };
 
-  const prendasFiltradas = prendas.filter(p =>
+  const prendasFiltradas = !q ? prendas : prendas.filter(p =>
     (p.nombre || '').toLowerCase().includes(q) || matchFecha(p.created_at)
   );
   const idsPrendasFiltradas = new Set(prendasFiltradas.map(p => p.id));
 
   const asigsFiltradas = asigs.filter(a => {
     const nombrePrenda = state.exportPrendas.find(p => p.id === a.prenda_id)?.nombre || '';
-    return idsPrendasFiltradas.has(a.prenda_id)
+    // Filtro de texto
+    const passText = !q || idsPrendasFiltradas.has(a.prenda_id)
         || (a.confeccionista?.full_name || '').toLowerCase().includes(q)
         || (nombrePrenda.toLowerCase().includes(q))
         || matchFecha(a.created_at);
+    // Filtro de estado
+    let passEstado = true;
+    if (anyFilterActive) {
+      const estados = getAsigEstado(a);
+      passEstado = (fPend && estados.includes('pendiente'))
+               || (fProc && estados.includes('en_proceso'))
+               || (fEntr && estados.includes('entregada'))
+               || (fConf && estados.includes('confirmada'));
+    }
+    return passText && passEstado;
   });
 
-  // Incluir también las prendas referenciadas por asignaciones que matchearon por confeccionista/fecha
+  // Incluir también las prendas referenciadas por asignaciones que matchearon
   const idsExtra = new Set(asigsFiltradas.map(a => a.prenda_id));
   const prendasFinal = prendas.filter(p => idsPrendasFiltradas.has(p.id) || idsExtra.has(p.id));
 
@@ -1310,6 +1351,7 @@ function exportarExcel() {
       'Prenda':                 prenda?.nombre || '',
       'Confeccionista':         a.confeccionista?.full_name || '',
       'Teléfono':               a.confeccionista?.phone || '',
+      'Fecha de entrega':       a.fecha_entrega ? formatDate(a.fecha_entrega) : '',
       'Asignadas':              Number(a.cantidad_asignada) || 0,
       'En proceso':             Number(a.cantidad_confeccionada) || 0,
       'Terminadas (reportadas)':Number(a.cantidad_entregada) || 0,

@@ -202,9 +202,27 @@
             <strong class="text-slate-300">fecha de creación</strong> (ej: 2026-06 o 06/06/2026).
             Deja vacío para incluir todo.
           </p>
-          <input type="text" id="export-search" placeholder="🔎 Buscar..."
+          <input type="text" id="export-search" placeholder="🔎 Buscar por prenda, confeccionista o fecha..."
                  oninput="renderExportPreview()"
                  class="w-full px-3 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-sm focus:outline-none focus:border-gold-500" />
+          <div class="flex flex-wrap gap-x-4 gap-y-2 pt-1">
+            <label class="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" id="filter-pendiente" onchange="renderExportPreview()" class="w-4 h-4 rounded accent-yellow-500" />
+              <span class="text-xs text-yellow-400 font-medium">⏳ Pendientes</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" id="filter-en-proceso" onchange="renderExportPreview()" class="w-4 h-4 rounded accent-blue-500" />
+              <span class="text-xs text-blue-400 font-medium">🔧 En proceso</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" id="filter-entregada" onchange="renderExportPreview()" class="w-4 h-4 rounded" style="accent-color:#d4a017" />
+              <span class="text-xs font-medium" style="color:#d4a017">📦 Entregadas (sin confirmar)</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer select-none">
+              <input type="checkbox" id="filter-confirmada" onchange="renderExportPreview()" class="w-4 h-4 rounded accent-green-500" />
+              <span class="text-xs text-green-400 font-medium">✅ Confirmadas</span>
+            </label>
+          </div>
           <div id="export-summary" class="text-xs text-slate-500"></div>
           <button onclick="exportarExcel()" class="btn-gold py-3 w-full">📊 Exportar a Excel</button>
         </div>
