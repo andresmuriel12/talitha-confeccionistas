@@ -494,10 +494,25 @@ function renderAsignacionesAdmin(asigs, container) {
                     · confirmadas: <strong>${confirmado}</strong> · por confirmar: <strong>${porConfirmar}</strong>${a.fecha_entrega ? ` · <span class="text-slate-400">Fecha entrega: ${formatDate(a.fecha_entrega)}</span>` : ''}</p>
                   <div class="flex gap-2">
                     <input type="number" id="confirm-cant-${a.id}" value="${porConfirmar}" min="1" max="${porConfirmar}"
+                           onfocus="this.select()"
                            class="w-20 px-2 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-center font-bold text-sm focus:outline-none focus:border-gold-500" />
                     <button onclick="confirmarEntrega('${a.id}')"
                             class="flex-1 py-2 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-lg text-xs transition-colors">
                       ✅ Confirmar recibido
+                    </button>
+                    <button onclick="toggleRechazoForm('${a.id}')"
+                            class="px-3 py-2 bg-zinc-800 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold rounded-lg text-xs transition-colors">
+                      ✕ No acepto
+                    </button>
+                  </div>
+                  <!-- FORM DE RECHAZO (oculto por defecto) -->
+                  <div id="rechazo-form-${a.id}" class="hidden mt-2">
+                    <textarea id="rechazo-nota-${a.id}" rows="2"
+                      placeholder="Describe el problema (ej: solo habían 15 de las 20 reportadas)..."
+                      class="w-full px-3 py-2.5 rounded-xl bg-zinc-900 border border-red-900/50 text-white text-sm focus:outline-none focus:border-red-500 resize-none mb-2"></textarea>
+                    <button onclick="guardarRechazoEntrega('${a.id}')"
+                            class="w-full py-2 bg-red-900/40 hover:bg-red-900/60 border border-red-700 text-red-300 font-bold rounded-lg text-xs transition-colors">
+                      📝 Guardar nota de rechazo
                     </button>
                   </div>
                 </div>`;
@@ -508,18 +523,21 @@ function renderAsignacionesAdmin(asigs, container) {
             })()}
 
             <!-- APROBACIÓN DE "NO PUDE CONFECCIONAR" -->
-            ${noConf > 0 ? `
+            ${noConf > 0 ? (() => {
+              // Tratar null/undefined como 'pendiente' para registros viejos o nuevos
+              const ncEst = a.no_conf_estado || 'pendiente';
+              return `
             <div class="mt-2 p-3 rounded-xl border ${
-              a.no_conf_estado === 'aprobado' ? 'bg-green-900/10 border-green-900/30' :
-              a.no_conf_estado === 'rechazado' ? 'bg-zinc-800/40 border-zinc-700/40' :
+              ncEst === 'aprobado' ? 'bg-green-900/10 border-green-900/30' :
+              ncEst === 'rechazado' ? 'bg-zinc-800/40 border-zinc-700/40' :
               'bg-red-500/5 border-red-500/20'}">
-              <p class="text-xs ${a.no_conf_estado === 'aprobado' ? 'text-green-400/90' : a.no_conf_estado === 'rechazado' ? 'text-slate-400' : 'text-red-400/90'} mb-2">
+              <p class="text-xs ${ncEst === 'aprobado' ? 'text-green-400/90' : ncEst === 'rechazado' ? 'text-slate-400' : 'text-red-400/90'} mb-2">
                 ❌ El confeccionista reportó <strong>${noConf}</strong> unidades que no pudo confeccionar.
-                ${a.no_conf_estado === 'pendiente' ? ' ¿Apruebas que se descuenten del total del pedido?' : ''}
-                ${a.no_conf_estado === 'aprobado' ? ' <strong>✓ Aprobado</strong> — ya se descontaron del total.' : ''}
-                ${a.no_conf_estado === 'rechazado' ? ' <strong>✕ Rechazado</strong> — siguen pendientes por entregar.' : ''}
+                ${ncEst === 'pendiente' ? ' ¿Apruebas que se descuenten del total del pedido?' : ''}
+                ${ncEst === 'aprobado'  ? ' <strong>✓ Aprobado</strong> — ya se descontaron del total.' : ''}
+                ${ncEst === 'rechazado' ? ' <strong>✕ Rechazado</strong> — siguen pendientes por entregar.' : ''}
               </p>
-              ${a.no_conf_estado === 'pendiente' ? `
+              ${ncEst === 'pendiente' ? `
               <div class="flex gap-2">
                 <button onclick="resolverNoConfeccionado('${a.id}','aprobado')"
                   class="flex-1 py-2 bg-green-700 hover:bg-green-600 text-white font-bold rounded-lg text-xs transition-colors">
@@ -532,9 +550,11 @@ function renderAsignacionesAdmin(asigs, container) {
               </div>` : `
               <button onclick="resolverNoConfeccionado('${a.id}','pendiente')"
                 class="text-xs text-slate-500 hover:text-slate-300 underline">Revisar de nuevo</button>`}
-            </div>` : ''}
+            </div>`;
+            })() : ''}
 
             ${a.nota_confeccionista ? `<p class="text-blue-300/80 text-xs mt-2">💬 Conf: <em>${escHtml(a.nota_confeccionista)}</em></p>` : ''}
+            ${a.rechazo_nota ? `<p class="text-red-400/80 text-xs mt-2">✕ Rechazo admin: <em>${escHtml(a.rechazo_nota)}</em></p>` : ''}
             ${renderFotosGaleria(a.id, true)}
           </div>
           <!-- EDIT MODE -->
@@ -544,11 +564,13 @@ function renderAsignacionesAdmin(asigs, container) {
               <div>
                 <label class="text-xs text-slate-400 mb-1 block">Unidades asignadas</label>
                 <input type="number" id="edit-asig-cant-${a.id}" value="${a.cantidad_asignada}" min="1"
+                  onfocus="this.select()"
                   class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-xl font-bold text-center focus:outline-none focus:border-gold-500" />
               </div>
               <div>
                 <label class="text-xs text-slate-400 mb-1 block">🔄 Devoluciones</label>
                 <input type="number" id="edit-asig-devols-${a.id}" value="${devols}" min="0"
+                  onfocus="this.select()"
                   class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-red-900/50 text-white text-xl font-bold text-center focus:outline-none focus:border-red-500" />
               </div>
             </div>
@@ -592,6 +614,11 @@ function renderAsignacionesConf(asigs, container) {
       <p class="font-bold text-white text-base mb-0.5">${escHtml(a.parte)}</p>
       ${a.descripcion ? `<p class="text-slate-400 text-sm">${escHtml(a.descripcion)}</p>` : ''}
       ${a.nota ? `<p class="text-yellow-400/80 text-sm mt-1">📝 Nota del admin: ${escHtml(a.nota)}</p>` : ''}
+      ${a.rechazo_nota ? `
+      <div class="mt-2 p-3 bg-red-900/15 border border-red-800/40 rounded-xl">
+        <p class="text-xs text-red-400 font-semibold mb-0.5">✕ El administrador no aceptó tu última entrega:</p>
+        <p class="text-sm text-red-300/90">${escHtml(a.rechazo_nota)}</p>
+      </div>` : ''}
 
       <!-- BALANCE VISUAL -->
       <div class="grid grid-cols-2 gap-2 mt-3 text-xs text-center">
@@ -624,6 +651,7 @@ function renderAsignacionesConf(asigs, container) {
             <label class="text-xs text-slate-400 mb-1 block">🔧 En proceso</label>
             <input type="number" id="inp-conf-${a.id}" value="${a.cantidad_confeccionada}"
                    min="0" max="${a.cantidad_asignada}"
+                   onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
                    oninput="calcPendientes('${a.id}',${a.cantidad_asignada})"
                    class="w-full px-3 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-xl font-bold text-center focus:outline-none focus:border-gold-500" />
           </div>
@@ -631,6 +659,7 @@ function renderAsignacionesConf(asigs, container) {
             <label class="text-xs text-slate-400 mb-1 block">✅ Terminadas</label>
             <input type="number" id="inp-entr-${a.id}" value="${a.cantidad_entregada}"
                    min="0" max="${a.cantidad_asignada}"
+                   onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
                    oninput="calcPendientes('${a.id}',${a.cantidad_asignada})"
                    class="w-full px-3 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-xl font-bold text-center focus:outline-none focus:border-gold-500" />
           </div>
@@ -639,6 +668,7 @@ function renderAsignacionesConf(asigs, container) {
           <label class="text-xs text-slate-400 mb-1 block">❌ No pude confeccionar</label>
           <input type="number" id="inp-noconf-${a.id}" value="${noConf}"
                  min="0" max="${a.cantidad_asignada}"
+                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
                  class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700/60 text-white text-lg font-bold text-center focus:outline-none focus:border-red-500" />
         </div>
         <div>
@@ -753,13 +783,31 @@ async function saveAsignacionProgress(asigId) {
   const fechaRaw         = document.getElementById(`inp-fecha-${asigId}`)?.value || '';
   const fechaEntrega     = fechaRaw ? new Date(fechaRaw).toISOString() : null;
 
-  const { error } = await sb.from('asignaciones').update({
+  const asig = state.currentAsignaciones.find(x => x.id === asigId);
+
+  const updateData = {
     cantidad_confeccionada:      confeccionada,
     cantidad_entregada:          entregada,
     cantidad_no_confeccionadas:  noConf,
     nota_confeccionista:         notaConf,
     fecha_entrega:               fechaEntrega
-  }).eq('id', asigId);
+  };
+
+  // Si el confeccionista cambió la cantidad de "no pude confeccionar",
+  // resetear el estado a pendiente para que el admin lo revise de nuevo.
+  const noConfAnterior = Number(asig?.cantidad_no_confeccionadas) || 0;
+  if (noConf !== noConfAnterior) {
+    updateData.no_conf_estado = 'pendiente';
+  }
+
+  // Si el confeccionista actualiza su entregado (está trabajando de nuevo),
+  // limpiar la nota de rechazo del admin para que no siga visible.
+  const entregadaAnterior = Number(asig?.cantidad_entregada) || 0;
+  if (entregada !== entregadaAnterior && asig?.rechazo_nota) {
+    updateData.rechazo_nota = null;
+  }
+
+  const { error } = await sb.from('asignaciones').update(updateData).eq('id', asigId);
 
   if (error) { showToast('Error al guardar', 'error'); return; }
   showToast('✅ Progreso guardado');
@@ -772,18 +820,34 @@ function toggleAsigEdit(asigId) {
 }
 
 async function saveAdminAsigEdit(asigId) {
-  const cantidad = parseInt(document.getElementById(`edit-asig-cant-${asigId}`)?.value) || 0;
-  const devols   = parseInt(document.getElementById(`edit-asig-devols-${asigId}`)?.value) || 0;
+  const cantidadInput = parseInt(document.getElementById(`edit-asig-cant-${asigId}`)?.value) || 0;
+  const nuevasDevols  = parseInt(document.getElementById(`edit-asig-devols-${asigId}`)?.value) || 0;
 
-  if (cantidad < 1) { showToast('La cantidad debe ser mayor a 0', 'error'); return; }
+  if (cantidadInput < 1) { showToast('La cantidad debe ser mayor a 0', 'error'); return; }
+
+  // Calcular el delta de devoluciones para ajustar cantidad_asignada automáticamente.
+  // Las piezas devueltas vuelven al confeccionista: las tiene que rehacer.
+  const asig        = state.currentAsignaciones.find(x => x.id === asigId);
+  const oldDevols   = Number(asig?.cantidad_devoluciones) || 0;
+  const delta       = nuevasDevols - oldDevols;  // +: más devoluciones → sumar al asignado
+
+  // La cantidad_asignada que muestra el input ya es el "nuevo objetivo manual".
+  // Le sumamos el delta de devoluciones para que las piezas devueltas se reflejen.
+  const nuevaCantidadAsignada = Math.max(1, cantidadInput + delta);
 
   const { error } = await sb.from('asignaciones').update({
-    cantidad_asignada:     cantidad,
-    cantidad_devoluciones: devols
+    cantidad_asignada:     nuevaCantidadAsignada,
+    cantidad_devoluciones: nuevasDevols
   }).eq('id', asigId);
 
   if (error) { showToast('Error al guardar', 'error'); console.error(error); return; }
-  showToast('✅ Asignación actualizada');
+
+  const msg = delta > 0
+    ? `✅ Actualizado — ${delta} devolución(es) sumada(s) al total asignado`
+    : delta < 0
+    ? `✅ Actualizado — devoluciones reducidas en ${Math.abs(delta)}`
+    : '✅ Asignación actualizada';
+  showToast(msg);
   await loadPrendaDetail(state.currentPrenda.id, false);
 }
 
@@ -829,15 +893,64 @@ async function confirmarEntrega(asigId) {
 
 // ---- Aprobación / rechazo de "no pude confeccionar" ----
 async function resolverNoConfeccionado(asigId, decision) {
+  const asig   = state.currentAsignaciones.find(x => x.id === asigId);
+  const noConf = Number(asig?.cantidad_no_confeccionadas) || 0;
+
+  const updateData = { no_conf_estado: decision };
+
+  if (decision === 'aprobado' && noConf > 0) {
+    // Reducir el total asignado: el confeccionista ya no tiene que hacer esas piezas
+    updateData.cantidad_asignada = Math.max(0, (Number(asig?.cantidad_asignada) || 0) - noConf);
+  }
+  // Si se rechaza: no cambia cantidad_asignada → el confeccionista sigue siendo responsable
+
   const { error } = await sb.from('asignaciones')
-    .update({ no_conf_estado: decision })
+    .update(updateData)
     .eq('id', asigId);
 
   if (error) { showToast('Error al guardar decisión', 'error'); console.error(error); return; }
-  const msg = decision === 'aprobado' ? '✓ Aprobado — se descontó del total'
-            : decision === 'rechazado' ? '✕ Rechazado — sigue pendiente'
+  const msg = decision === 'aprobado'  ? `✓ Aprobado — se descontaron ${noConf} piezas del total asignado`
+            : decision === 'rechazado' ? '✕ Rechazado — el confeccionista sigue siendo responsable de esas piezas'
             : 'Marcado para revisión';
   showToast(msg);
+  await loadPrendaDetail(state.currentPrenda.id, false);
+}
+
+// ---- Toggle del formulario de rechazo de entrega ----
+function toggleRechazoForm(asigId) {
+  const form = document.getElementById(`rechazo-form-${asigId}`);
+  if (!form) return;
+  form.classList.toggle('hidden');
+  if (!form.classList.contains('hidden')) {
+    // Hacer foco en el textarea al abrirlo
+    const ta = document.getElementById(`rechazo-nota-${asigId}`);
+    if (ta) setTimeout(() => ta.focus(), 50);
+  }
+}
+
+// ---- Guardar nota de rechazo de entrega ----
+async function guardarRechazoEntrega(asigId) {
+  const nota = document.getElementById(`rechazo-nota-${asigId}`)?.value?.trim();
+  if (!nota) {
+    showToast('Escribe una nota explicando el problema', 'error');
+    return;
+  }
+
+  const { error } = await sb.from('asignaciones')
+    .update({ rechazo_nota: nota })
+    .eq('id', asigId);
+
+  if (error) {
+    showToast('Error al guardar nota', 'error');
+    console.error(error);
+    return;
+  }
+
+  showToast('✕ Nota de rechazo guardada — el confeccionista la verá en su vista');
+  // Ocultar el formulario
+  const form = document.getElementById(`rechazo-form-${asigId}`);
+  if (form) form.classList.add('hidden');
+  // Recargar para mostrar la nota en la UI
   await loadPrendaDetail(state.currentPrenda.id, false);
 }
 
