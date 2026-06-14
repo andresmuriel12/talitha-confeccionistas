@@ -641,8 +641,8 @@ function readTallasInput(prefix) {
 }
 
 function renderTallasResumen(curva, progreso, isAdmin) {
-  // Solo mostrar tallas que tienen curva > 0
-  const tallasActivas = TODAS_TALLAS.filter(t => (curva[t] || 0) > 0);
+  // Mostrar tallas que tienen curva > 0 O que tienen progreso registrado
+  const tallasActivas = TODAS_TALLAS.filter(t => (curva[t] || 0) > 0 || (progreso[t] || 0) > 0);
   if (!tallasActivas.length) return '';
 
   return `
@@ -716,8 +716,8 @@ function renderAsignacionesAdmin(asigs, container) {
               </div>
             </div>
 
-            <!-- Tallas resumen -->
-            ${tieneTallas ? renderTallasResumen(curva, progreso, true) : ''}
+            <!-- Tallas resumen — visible si hay curva O si el confeccionista ya reportó tallas -->
+            ${renderTallasResumen(curva, progreso, true)}
 
             <!-- CONTEO VISUAL -->
             <div class="grid grid-cols-4 gap-1.5 mt-2 text-xs text-center">
@@ -836,7 +836,12 @@ function renderAsignacionesAdmin(asigs, container) {
                   class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-red-900/50 text-white text-xl font-bold text-center focus:outline-none focus:border-red-500" />
               </div>
             </div>
-            <div class="flex gap-2">
+            <!-- CURVA DE TALLAS — editable por el admin -->
+            <div class="mt-3 pt-3 border-t border-zinc-800">
+              <p class="text-xs text-slate-400 font-semibold mb-2">📐 Curva de tallas <span class="text-slate-600 font-normal">(distribución por talla — deja en 0 si no aplica)</span></p>
+              ${renderTallasInput(`edit-talla-${a.id}`, curva)}
+            </div>
+            <div class="flex gap-2 mt-3">
               <button onclick="saveAdminAsigEdit('${a.id}')"
                 class="flex-1 py-2.5 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-xl text-sm">💾 Guardar</button>
               <button onclick="toggleAsigEdit('${a.id}')"
@@ -952,8 +957,8 @@ function renderAsignacionesConf(asigs, container) {
           </div>`;
         })() : ''}
 
-        <!-- Tallas resumen (solo lectura) -->
-        ${tieneTallas ? renderTallasResumen(curva, progreso, false) : ''}
+        <!-- Tallas resumen (solo lectura) — visible si hay curva O si ya hay progreso registrado -->
+        ${renderTallasResumen(curva, progreso, false)}
       </div>
 
       <!-- SEPARADOR con etiqueta -->
@@ -967,39 +972,21 @@ function renderAsignacionesConf(asigs, container) {
       <!-- CAMPOS QUE LLENA EL CONFECCIONISTA -->
       <div class="px-4 pb-4 pt-5 space-y-4">
 
-        ${tieneTallas ? `
-        <!-- TALLAS PROGRESO -->
+        <!-- TALLAS PROGRESO — siempre visible para que el confeccionista reporte por talla -->
         <div>
-          <p class="text-sm font-bold text-white mb-2">¿Cuántas terminaste por talla?</p>
+          <p class="text-sm font-bold text-white mb-1">✅ ¿Cuántas terminaste por talla?</p>
+          ${tieneTallas ? '' : `<p class="text-xs text-slate-500 mb-2">Llena solo las tallas que aplican a esta asignación.</p>`}
           ${renderTallasInput(`tp-${a.id}`, progreso)}
-        </div>` : `
-        <!-- CAMPOS SIMPLES SIN TALLAS -->
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-sm font-semibold text-slate-300 mb-2 block">🔧 En proceso</label>
-            <input type="number" id="inp-conf-${a.id}" value="${a.cantidad_confeccionada}"
-                   min="0"
-                   onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
-                   class="w-full px-3 py-4 rounded-2xl bg-zinc-800 border border-zinc-700 text-white text-2xl font-bold text-center focus:outline-none focus:border-gold-500" />
-          </div>
-          <div>
-            <label class="text-sm font-semibold text-slate-300 mb-2 block">✅ Terminadas</label>
-            <input type="number" id="inp-entr-${a.id}" value="${entregada}"
-                   min="0"
-                   onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
-                   class="w-full px-3 py-4 rounded-2xl bg-zinc-800 border border-zinc-700 text-white text-2xl font-bold text-center focus:outline-none focus:border-gold-500" />
-          </div>
-        </div>`}
+        </div>
 
-        <!-- EN PROCESO (si hay tallas, igual se pone el en proceso total) -->
-        ${tieneTallas ? `
+        <!-- EN PROCESO TOTAL -->
         <div>
           <label class="text-sm font-semibold text-slate-300 mb-2 block">🔧 En proceso (total)</label>
           <input type="number" id="inp-conf-${a.id}" value="${a.cantidad_confeccionada}"
                  min="0"
                  onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
                  class="w-full px-3 py-3 rounded-2xl bg-zinc-800 border border-zinc-700 text-white text-xl font-bold text-center focus:outline-none focus:border-gold-500" />
-        </div>` : ''}
+        </div>
 
         <!-- NO PUDE CONFECCIONAR -->
         <div>
@@ -1142,17 +1129,10 @@ async function saveAsignacionProgress(asigId) {
   const noConf        = parseInt(document.getElementById(`inp-noconf-${asigId}`)?.value) || 0;
 
   const asig = state.currentAsignaciones.find(x => x.id === asigId);
-  const tieneTallas = TODAS_TALLAS.some(t => ((asig?.curva_tallas || {})[t] || 0) > 0);
 
-  let entregada = 0;
-  let tallas_progreso = {};
-
-  if (tieneTallas) {
-    tallas_progreso = readTallasInput(`tp-${asigId}`);
-    entregada = Object.values(tallas_progreso).reduce((s, v) => s + v, 0);
-  } else {
-    entregada = parseInt(document.getElementById(`inp-entr-${asigId}`)?.value) || 0;
-  }
+  // Siempre leer tallas (el confeccionista siempre ve la grilla de tallas)
+  const tallas_progreso = readTallasInput(`tp-${asigId}`);
+  const entregada = Object.values(tallas_progreso).reduce((s, v) => s + v, 0);
 
   const updateData = {
     cantidad_confeccionada:     confeccionada,
@@ -1189,12 +1169,21 @@ function toggleAsigEdit(asigId) {
 async function saveAdminAsigEdit(asigId) {
   const cantidadInput = parseInt(document.getElementById(`edit-asig-cant-${asigId}`)?.value) || 0;
   const nuevasDevols  = parseInt(document.getElementById(`edit-asig-devols-${asigId}`)?.value) || 0;
+  const curva_tallas  = readTallasInput(`edit-talla-${asigId}`);
 
   if (cantidadInput < 1) { showToast('La cantidad debe ser mayor a 0', 'error'); return; }
 
+  // Validar que la suma de tallas no supere la cantidad asignada
+  const sumaTallas = Object.values(curva_tallas).reduce((s, v) => s + v, 0);
+  if (sumaTallas > 0 && sumaTallas > cantidadInput) {
+    showToast(`La suma de tallas (${sumaTallas}) supera la cantidad asignada (${cantidadInput})`, 'error');
+    return;
+  }
+
   const { error } = await sb.from('asignaciones').update({
     cantidad_asignada:     cantidadInput,
-    cantidad_devoluciones: nuevasDevols
+    cantidad_devoluciones: nuevasDevols,
+    curva_tallas
   }).eq('id', asigId);
 
   if (error) { showToast('Error al guardar', 'error'); console.error(error); return; }
