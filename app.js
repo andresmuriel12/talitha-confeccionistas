@@ -223,7 +223,19 @@ function hasActiveEditing() {
 function setupRealtime() {
   if (state.realtimeSub) sb.removeChannel(state.realtimeSub);
   state.realtimeSub = sb.channel('conf-realtime')
-    .on('postgres_changes', { event:'*', schema:'public', table:'prendas' }, () => loadPrendas())
+    .on('postgres_changes', { event:'*', schema:'public', table:'prendas' }, (payload) => {
+      loadPrendas();
+      // Si la prenda que se está viendo fue eliminada, navegar de regreso
+      if (payload.eventType === 'DELETE' && state.currentPrenda?.id === payload.old?.id) {
+        showToast('⚠️ Esta prenda fue eliminada', 'warn');
+        state.currentPrenda = null;
+        state.currentAsignaciones = [];
+        state.currentFotos = {};
+        state.currentInsumos = [];
+        state.currentAsigInsumos = {};
+        goBack();
+      }
+    })
     .on('postgres_changes', { event:'*', schema:'public', table:'asignaciones' }, () => {
       // loadPrendas sin await para no bloquear la actualización del detalle
       loadPrendas();
@@ -269,7 +281,18 @@ async function loadConfeccionistas() {
 async function loadPrendaDetail(prendaId, navigate = true) {
   const { data: prenda, error: pErr } = await sb.from('prendas')
     .select('*').eq('id', prendaId).single();
-  if (pErr || !prenda) { showToast('Error cargando prenda', 'error'); return; }
+  if (pErr || !prenda) {
+    // La prenda ya no existe (fue eliminada) — navegar al inicio sin error
+    if (state.currentPrenda?.id === prendaId) {
+      state.currentPrenda = null;
+      state.currentAsignaciones = [];
+      state.currentFotos = {};
+      state.currentInsumos = [];
+      state.currentAsigInsumos = {};
+      goBack();
+    }
+    return;
+  }
 
   const isAdmin = state.profile?.role === 'admin';
   const asigSelect = isAdmin
@@ -640,24 +663,60 @@ function readTallasInput(prefix) {
   return resultado;
 }
 
-function renderTallasResumen(curva, progreso, isAdmin) {
+function renderTallasResumen(curva, progreso, isAdmin, confirmadas = {}) {
   // Mostrar tallas que tienen curva > 0 O que tienen progreso registrado
   const tallasActivas = TODAS_TALLAS.filter(t => (curva[t] || 0) > 0 || (progreso[t] || 0) > 0);
   if (!tallasActivas.length) return '';
 
+  if (isAdmin) {
+    // Admin: muestra asignadas, reportadas y confirmadas por talla
+    return `
+    <div class="mt-2 mb-2">
+      <p class="text-xs text-slate-500 font-medium mb-1.5">📐 Curva de tallas</p>
+      <div class="grid grid-cols-5 gap-1 text-center text-xs">
+        ${tallasActivas.map(t => {
+          const asig  = curva[t] || 0;
+          const hecho = progreso[t] || 0;
+          const conf  = confirmadas[t] || 0;
+          const pct   = asig > 0 ? Math.min(100, Math.round(hecho/asig*100)) : 0;
+          return `
+          <div class="bg-zinc-800 rounded-lg py-1.5 px-1">
+            <div class="text-slate-400 font-medium mb-0.5">${t}</div>
+            <div class="text-white font-bold text-sm">${hecho}<span class="text-slate-500 font-normal">/${asig}</span></div>
+            ${conf > 0 ? `<div class="text-green-400 text-xs font-semibold">✅ ${conf}</div>` : (asig > 0 ? `<div class="text-xs ${hecho >= asig ? 'text-green-400' : 'text-slate-600'}">${pct}%</div>` : '')}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  // Confeccionista: muestra terminadas, confirmadas por talla y barra de progreso
+  const tieneConfirmadas = tallasActivas.some(t => (confirmadas[t] || 0) > 0);
   return `
   <div class="mt-2 mb-2">
-    <p class="text-xs text-slate-500 font-medium mb-1.5">📐 Curva de tallas</p>
-    <div class="grid grid-cols-5 gap-1 text-center text-xs">
+    <p class="text-xs text-slate-500 font-medium mb-1.5">📐 Estado por talla</p>
+    <div class="space-y-1">
       ${tallasActivas.map(t => {
-        const asig  = curva[t] || 0;
-        const hecho = progreso[t] || 0;
-        const pct   = asig > 0 ? Math.min(100, Math.round(hecho/asig*100)) : 0;
+        const curva_t = curva[t] || 0;
+        const hecho_t = progreso[t] || 0;
+        const conf_t  = confirmadas[t] || 0;
+        const pct_conf = curva_t > 0 ? Math.min(100, Math.round(conf_t / curva_t * 100)) : 0;
+        const pendConf = Math.max(0, hecho_t - conf_t);
         return `
-        <div class="bg-zinc-800 rounded-lg py-1.5 px-1">
-          <div class="text-slate-400 font-medium">${t}</div>
-          <div class="text-white font-bold text-sm">${isAdmin ? `${hecho}/<span class="text-slate-400 text-xs">${asig}</span>` : asig}</div>
-          ${isAdmin && asig > 0 ? `<div class="text-xs ${hecho >= asig ? 'text-green-400' : 'text-slate-500'}">${pct}%</div>` : ''}
+        <div class="bg-zinc-800/80 rounded-lg px-3 py-2 flex items-center gap-2">
+          <span class="text-xs font-bold text-white w-8 shrink-0">${t}</span>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs text-slate-400 leading-snug">
+              Reporté: <strong class="text-white">${hecho_t}</strong>
+              ${conf_t > 0 ? ` · <span class="text-green-400 font-semibold">✅ ${conf_t} aprobadas</span>` : ''}
+              ${pendConf > 0 && tieneConfirmadas ? ` · <span class="text-yellow-500">⏳ ${pendConf} por aprobar</span>` : ''}
+            </div>
+            ${curva_t > 0 ? `
+            <div class="mt-1 w-full h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+              <div class="h-full rounded-full transition-all ${pct_conf >= 100 ? 'bg-green-400' : 'bg-green-600'}" style="width:${pct_conf}%"></div>
+            </div>` : ''}
+          </div>
+          ${curva_t > 0 ? `<span class="text-xs font-bold shrink-0 ${pct_conf >= 100 ? 'text-green-400' : 'text-slate-500'}">${pct_conf}%</span>` : ''}
         </div>`;
       }).join('')}
     </div>
@@ -687,9 +746,14 @@ function renderAsignacionesAdmin(asigs, container) {
         </div>
       </div>
       ${g.items.map(a => {
-        const curva    = a.curva_tallas    || {};
-        const progreso = a.tallas_progreso || {};
+        const curva              = a.curva_tallas       || {};
+        const progreso           = a.tallas_progreso    || {};
+        const tallas_conf_actual = a.tallas_confirmadas || {};
         const tieneTallas = TODAS_TALLAS.some(t => (curva[t] || 0) > 0);
+        // Tallas con unidades pendientes de confirmar (reportadas - ya confirmadas)
+        const tallasConPendiente = TODAS_TALLAS.filter(t =>
+          (progreso[t] || 0) > (tallas_conf_actual[t] || 0));
+        const hasTallasPendientes = tallasConPendiente.length > 0;
         const devols   = Number(a.cantidad_devoluciones) || 0;
         const noConf   = Number(a.cantidad_no_confeccionadas) || 0;
         const reportado  = Number(a.cantidad_entregada) || 0;
@@ -717,7 +781,7 @@ function renderAsignacionesAdmin(asigs, container) {
             </div>
 
             <!-- Tallas resumen — visible si hay curva O si el confeccionista ya reportó tallas -->
-            ${renderTallasResumen(curva, progreso, true)}
+            ${renderTallasResumen(curva, progreso, true, tallas_conf_actual)}
 
             <!-- CONTEO VISUAL -->
             <div class="grid grid-cols-4 gap-1.5 mt-2 text-xs text-center">
@@ -753,35 +817,55 @@ function renderAsignacionesAdmin(asigs, container) {
               </div>
             </div>
 
-            <!-- CONFIRMACIÓN DE ENTREGA (aceptación parcial) -->
+            <!-- CONFIRMACIÓN DE ENTREGA — individual por talla o total -->
             ${porConfirmar > 0 ? `
             <div class="mt-3 p-3 bg-gold-500/5 border border-gold-500/20 rounded-xl">
-              <p class="text-xs text-gold-400/90 font-semibold mb-1">
-                📦 Reportó <strong>${reportado}</strong> terminadas · Ya aceptaste: <strong>${confirmado}</strong>
+              <p class="text-xs text-gold-400/90 font-semibold mb-2">
+                📦 Por confirmar: <strong>${porConfirmar}</strong> terminadas
                 ${a.fecha_entrega ? ` · <span class="text-slate-400">Entrega: ${formatDate(a.fecha_entrega)}</span>` : ''}
               </p>
+
+              ${hasTallasPendientes ? `
+              <!-- CONFIRMACIÓN POR TALLA -->
+              <p class="text-xs text-slate-500 mb-2">Ajusta las cantidades que aceptas por talla:</p>
+              <div class="grid grid-cols-5 gap-1 mb-3">
+                ${TODAS_TALLAS.filter(t => (progreso[t] || 0) > 0).map(t => {
+                  const rep_t  = progreso[t] || 0;
+                  const conf_t = tallas_conf_actual[t] || 0;
+                  const pend_t = Math.max(0, rep_t - conf_t);
+                  if (pend_t <= 0) return '';
+                  return `
+                  <div class="text-center">
+                    <div class="text-xs text-slate-400 mb-0.5">${t}</div>
+                    <div class="text-xs text-slate-600 mb-0.5">Rep:${rep_t}</div>
+                    <input type="number" id="ctalla-${a.id}-${t}" value="${pend_t}" min="0" max="${pend_t}"
+                      onfocus="this.select()"
+                      class="w-full px-0.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" />
+                  </div>`;
+                }).join('')}
+              </div>` : `
+              <!-- CONFIRMACIÓN TOTAL (sin tallas) -->
               <p class="text-xs text-slate-500 mb-2">¿Cuántas aceptas ahora? (máx. ${porConfirmar})</p>
-              <div class="space-y-2">
-                <div class="flex gap-2 items-center">
-                  <input type="number" id="confirm-cant-${a.id}" value="${porConfirmar}" min="1" max="${porConfirmar}"
-                    onfocus="this.select()"
-                    oninput="validarCantidadConfirm('${a.id}',${porConfirmar})"
-                    class="w-20 px-2 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-center font-bold text-lg focus:outline-none focus:border-gold-500" />
-                  <span id="confirm-warn-${a.id}" class="text-xs text-red-400 hidden">⚠️ Máximo ${porConfirmar}</span>
-                </div>
-                <textarea id="confirm-nota-${a.id}" rows="2"
-                  placeholder="Nota opcional (ej: faltan 5, calidad ok...)"
-                  class="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700/60 text-white text-xs focus:outline-none focus:border-gold-500 resize-none"></textarea>
-                <div class="flex gap-2">
-                  <button onclick="confirmarEntrega('${a.id}')"
-                    class="flex-1 py-2.5 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-xl text-xs transition-colors">
-                    ✅ Confirmar recibido
-                  </button>
-                  <button onclick="rechazarEntrega('${a.id}',${reportado})"
-                    class="px-3 py-2.5 bg-zinc-800 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-xs transition-colors">
-                    ✕ Rechazar todo
-                  </button>
-                </div>
+              <div class="flex gap-2 items-center mb-2">
+                <input type="number" id="confirm-cant-${a.id}" value="${porConfirmar}" min="1" max="${porConfirmar}"
+                  onfocus="this.select()"
+                  oninput="validarCantidadConfirm('${a.id}',${porConfirmar})"
+                  class="w-20 px-2 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-center font-bold text-lg focus:outline-none focus:border-gold-500" />
+                <span id="confirm-warn-${a.id}" class="text-xs text-red-400 hidden">⚠️ Máximo ${porConfirmar}</span>
+              </div>`}
+
+              <textarea id="confirm-nota-${a.id}" rows="2"
+                placeholder="Nota opcional (ej: calidad ok, revisar costuras...)"
+                class="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700/60 text-white text-xs focus:outline-none focus:border-gold-500 resize-none mb-2"></textarea>
+              <div class="flex gap-2">
+                <button onclick="confirmarEntrega('${a.id}',${hasTallasPendientes})"
+                  class="flex-1 py-2.5 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-xl text-xs transition-colors">
+                  ✅ Confirmar recibido
+                </button>
+                <button onclick="rechazarEntrega('${a.id}',${reportado})"
+                  class="px-3 py-2.5 bg-zinc-800 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-xs transition-colors">
+                  ✕ Rechazar todo
+                </button>
               </div>
             </div>` : confirmado > 0 ? `
             <p class="text-xs text-green-400/70 mt-2 px-1">✅ ${confirmado} aceptadas · ${terminadasEfectivas} netas (−${devols} devueltas)</p>` : ''}
@@ -873,8 +957,9 @@ function renderAsignacionesConf(asigs, container) {
   }
 
   container.innerHTML = asigs.map(a => {
-    const curva    = a.curva_tallas    || {};
-    const progreso = a.tallas_progreso || {};
+    const curva       = a.curva_tallas       || {};
+    const progreso    = a.tallas_progreso    || {};
+    const confirmadas = a.tallas_confirmadas || {};
     const tieneTallas = TODAS_TALLAS.some(t => (curva[t] || 0) > 0);
     const devols   = Number(a.cantidad_devoluciones) || 0;
     const noConf   = Number(a.cantidad_no_confeccionadas) || 0;
@@ -957,8 +1042,8 @@ function renderAsignacionesConf(asigs, container) {
           </div>`;
         })() : ''}
 
-        <!-- Tallas resumen (solo lectura) — visible si hay curva O si ya hay progreso registrado -->
-        ${renderTallasResumen(curva, progreso, false)}
+        <!-- Tallas resumen — muestra estado por talla con confirmaciones -->
+        ${renderTallasResumen(curva, progreso, false, confirmadas)}
       </div>
 
       <!-- SEPARADOR con etiqueta -->
@@ -1206,17 +1291,13 @@ function validarCantidadConfirm(asigId, max) {
   }
 }
 
-// Confirmación de entrega con aceptación parcial
+// Confirmación de entrega — por talla individual o total
 const _accionesEnCurso = new Set();
-async function confirmarEntrega(asigId) {
+async function confirmarEntrega(asigId, hasTallasPendientes = false) {
   if (_accionesEnCurso.has(`confirmar-${asigId}`)) return;
   _accionesEnCurso.add(`confirmar-${asigId}`);
   try {
-    const inp    = document.getElementById(`confirm-cant-${asigId}`);
-    const nota   = document.getElementById(`confirm-nota-${asigId}`)?.value?.trim() || null;
-    const cantidad = parseInt(inp?.value) || 0;
-    if (cantidad < 1) { showToast('Ingresa una cantidad válida (mínimo 1)', 'error'); return; }
-
+    const nota = document.getElementById(`confirm-nota-${asigId}`)?.value?.trim() || null;
     const asig = state.currentAsignaciones.find(x => x.id === asigId);
     if (!asig) return;
 
@@ -1224,17 +1305,45 @@ async function confirmarEntrega(asigId) {
     const confirmado   = Number(asig.cantidad_confirmada) || 0;
     const porConfirmar = Math.max(0, reportado - confirmado);
 
-    // VALIDACIÓN: no puede aceptar más de lo que el confeccionista reportó
+    const tallas_progreso        = asig.tallas_progreso    || {};
+    const tallas_conf_previas    = asig.tallas_confirmadas || {};
+
+    let cantidad = 0;
+    const updateData = { confirmacion_nota: nota };
+
+    if (hasTallasPendientes) {
+      // Leer inputs por talla y calcular nuevas confirmadas acumuladas
+      const nuevas_tallas_conf = { ...tallas_conf_previas };
+      TODAS_TALLAS.forEach(t => {
+        const rep_t  = tallas_progreso[t]     || 0;
+        const prev_t = tallas_conf_previas[t] || 0;
+        const pend_t = Math.max(0, rep_t - prev_t);
+        if (pend_t <= 0) return;
+        const inp = document.getElementById(`ctalla-${asigId}-${t}`);
+        if (!inp) return;
+        const val = Math.min(pend_t, Math.max(0, parseInt(inp.value) || 0));
+        nuevas_tallas_conf[t] = prev_t + val;
+        cantidad += val;
+      });
+      updateData.tallas_confirmadas = nuevas_tallas_conf;
+    } else {
+      // Confirmación total (sin tallas)
+      const inp = document.getElementById(`confirm-cant-${asigId}`);
+      cantidad = parseInt(inp?.value) || 0;
+    }
+
+    if (cantidad < 1) { showToast('Ingresa al menos 1 unidad para confirmar', 'error'); return; }
+
+    // Validación: no puede aceptar más de lo reportado pendiente
     if (cantidad > porConfirmar) {
       showToast(`⚠️ Solo puedes aceptar hasta ${porConfirmar} (lo que reportó el confeccionista)`, 'error');
       return;
     }
 
+    updateData.cantidad_confirmada = confirmado + cantidad;
+
     const { data: actualizado, error } = await sb.from('asignaciones')
-      .update({
-        cantidad_confirmada: confirmado + cantidad,
-        confirmacion_nota:   nota
-      })
+      .update(updateData)
       .eq('id', asigId)
       .eq('cantidad_confirmada', confirmado) // optimistic locking
       .select('id');
@@ -1248,7 +1357,7 @@ async function confirmarEntrega(asigId) {
 
     const rechazadas = porConfirmar - cantidad;
     const msg = rechazadas > 0
-      ? `✅ ${cantidad} aceptadas · ${rechazadas} rechazadas (sin confirmar)`
+      ? `✅ ${cantidad} aceptadas · ${rechazadas} sin confirmar aún`
       : `✅ ${cantidad} unidades confirmadas`;
     showToast(msg);
     await loadPrendaDetail(state.currentPrenda.id, false);
@@ -1784,14 +1893,20 @@ function exportarExcel() {
     const devols = Number(a.cantidad_devoluciones) || 0;
     const conf   = Number(a.cantidad_confirmada) || 0;
     const neto   = Math.max(0, conf - devols);
-    const curva  = a.curva_tallas || {};
-    const tallasStr = TODAS_TALLAS.filter(t => curva[t]).map(t => `${t}:${curva[t]}`).join(', ');
+    const curva       = a.curva_tallas       || {};
+    const tallasConf  = a.tallas_confirmadas || {};
+    const tallasProg  = a.tallas_progreso    || {};
+    const tallasStr      = TODAS_TALLAS.filter(t => curva[t]).map(t => `${t}:${curva[t]}`).join(', ');
+    const tallasProgStr  = TODAS_TALLAS.filter(t => tallasProg[t]).map(t => `${t}:${tallasProg[t]}`).join(', ');
+    const tallasConfStr  = TODAS_TALLAS.filter(t => tallasConf[t]).map(t => `${t}:${tallasConf[t]}`).join(', ');
     return {
       'Prenda':                  prenda?.nombre || '',
       'Confeccionista':          a.confeccionista?.full_name || '',
       'Teléfono':                a.confeccionista?.phone || '',
       'Fecha de entrega':        a.fecha_entrega ? formatDate(a.fecha_entrega) : '',
       'Curva de tallas':         tallasStr,
+      'Tallas reportadas':       tallasProgStr,
+      'Tallas confirmadas':      tallasConfStr,
       'Asignadas':               Number(a.cantidad_asignada) || 0,
       'En proceso':              Number(a.cantidad_confeccionada) || 0,
       'Terminadas (reportadas)': Number(a.cantidad_entregada) || 0,
