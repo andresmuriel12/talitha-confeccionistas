@@ -31,6 +31,7 @@ const state = {
   currentAsignaciones: [],
   currentFotos:        {},
   currentInsumos:      [],
+  currentAsigInsumos:  {},
   exportPrendas:       [],
   exportAsignaciones:  [],
   currentFilter:       'todas',
@@ -143,7 +144,7 @@ async function init() {
 function resetState() {
   Object.assign(state, {
     user:null, profile:null, prendas:[], confeccionistas:[],
-    currentPrenda:null, currentAsignaciones:[], currentInsumos:[],
+    currentPrenda:null, currentAsignaciones:[], currentInsumos:[], currentAsigInsumos:{},
     currentFilter:'todas', currentNav:'view-prendas', prevView:null, pendingConfirm:null
   });
   if (state.realtimeSub) { sb.removeChannel(state.realtimeSub); state.realtimeSub = null; }
@@ -197,8 +198,9 @@ async function loadProfile(user) {
 
 async function setupUI() {
   const isAdmin = state.profile?.role === 'admin';
-  document.getElementById('nav-admin').style.display = isAdmin ? 'block' : 'none';
-  document.getElementById('nav-conf').style.display  = isAdmin ? 'none'  : 'block';
+  // Usar classList para evitar conflicto con clase 'hidden' de Tailwind
+  document.getElementById('nav-admin').classList.toggle('hidden', !isAdmin);
+  document.getElementById('nav-conf').classList.toggle('hidden', isAdmin);
   document.getElementById('prendas-stats').classList.toggle('hidden', !isAdmin);
   showSection('app-shell');
   await loadPrendas();
@@ -222,15 +224,20 @@ function setupRealtime() {
   if (state.realtimeSub) sb.removeChannel(state.realtimeSub);
   state.realtimeSub = sb.channel('conf-realtime')
     .on('postgres_changes', { event:'*', schema:'public', table:'prendas' }, () => loadPrendas())
-    .on('postgres_changes', { event:'*', schema:'public', table:'asignaciones' }, async () => {
-      await loadPrendas();
-      if (state.currentPrenda && !hasActiveEditing()) await loadPrendaDetail(state.currentPrenda.id, false);
+    .on('postgres_changes', { event:'*', schema:'public', table:'asignaciones' }, () => {
+      // loadPrendas sin await para no bloquear la actualización del detalle
+      loadPrendas();
+      // Siempre actualizar el detalle si está visible (sin bloquear por edición del admin)
+      if (state.currentPrenda) loadPrendaDetail(state.currentPrenda.id, false);
     })
-    .on('postgres_changes', { event:'*', schema:'public', table:'asignacion_fotos' }, async () => {
-      if (state.currentPrenda && !hasActiveEditing()) await loadPrendaDetail(state.currentPrenda.id, false);
+    .on('postgres_changes', { event:'*', schema:'public', table:'asignacion_fotos' }, () => {
+      if (state.currentPrenda) loadPrendaDetail(state.currentPrenda.id, false);
     })
-    .on('postgres_changes', { event:'*', schema:'public', table:'insumos' }, async () => {
-      if (state.currentPrenda && !hasActiveEditing()) await loadPrendaDetail(state.currentPrenda.id, false);
+    .on('postgres_changes', { event:'*', schema:'public', table:'insumos' }, () => {
+      if (state.currentPrenda) loadPrendaDetail(state.currentPrenda.id, false);
+    })
+    .on('postgres_changes', { event:'*', schema:'public', table:'asignacion_insumos' }, () => {
+      if (state.currentPrenda) loadPrendaDetail(state.currentPrenda.id, false);
     })
     .subscribe();
 }
@@ -286,16 +293,28 @@ async function loadPrendaDetail(prendaId, navigate = true) {
     });
   }
 
-  // Insumos de la prenda
+  // Insumos globales de la prenda (total del pedido)
   const { data: insumos } = await sb.from('insumos')
     .select('*')
     .eq('prenda_id', prendaId)
     .order('created_at');
 
+  // Insumos asignados por confeccionista (tabla asignacion_insumos)
+  const asigInsumosMap = {};
+  if (asigIds.length) {
+    const { data: asigInsumos } = await sb.from('asignacion_insumos')
+      .select('*, insumo:insumos(nombre, unidad)')
+      .in('asignacion_id', asigIds);
+    (asigInsumos || []).forEach(ai => {
+      (asigInsumosMap[ai.asignacion_id] ||= []).push(ai);
+    });
+  }
+
   state.currentPrenda       = prenda;
   state.currentAsignaciones = asigs || [];
   state.currentFotos        = fotosPorAsig;
   state.currentInsumos      = insumos || [];
+  state.currentAsigInsumos  = asigInsumosMap;
   renderPrendaDetail();
   if (navigate) showDetailView('view-prenda-detail', state.currentNav);
 }
@@ -457,7 +476,7 @@ function renderInsumos(prendaId, isAdmin) {
 
   return `
   <div class="mt-3 pt-3 border-t border-zinc-800">
-    <p class="text-xs font-semibold text-slate-400 mb-2">📦 Insumos entregados</p>
+    <p class="text-xs font-semibold text-slate-400 mb-2">📦 Insumos del pedido <span class="text-slate-600 font-normal">(total global)</span></p>
     ${lista}
     ${isAdmin ? `
     <div class="mt-3 grid grid-cols-12 gap-1.5">
@@ -494,6 +513,90 @@ async function saveInsumo(prendaId) {
 async function deleteInsumo(insumoId) {
   confirmAction('¿Eliminar insumo?', 'Se eliminará este insumo de la prenda.', async () => {
     const { error } = await sb.from('insumos').delete().eq('id', insumoId);
+    if (error) { showToast('Error al eliminar', 'error'); return; }
+    showToast('Insumo eliminado');
+    await loadPrendaDetail(state.currentPrenda.id, false);
+  });
+}
+
+// ================================================================
+// 10c-2. INSUMOS POR ASIGNACIÓN
+// ================================================================
+function renderAsigInsumos(asigId, isAdmin) {
+  const items = state.currentAsigInsumos?.[asigId] || [];
+  const globalInsumos = state.currentInsumos || [];
+
+  // Confeccionista: solo mostrar si tiene insumos asignados
+  if (!isAdmin && !items.length) return '';
+
+  const listaHtml = items.length
+    ? items.map(ai => `
+      <div class="flex items-center justify-between py-1.5 border-b border-zinc-800/60 last:border-0">
+        <span class="text-sm text-slate-300">${escHtml(ai.insumo?.nombre || '')}</span>
+        <div class="flex items-center gap-2">
+          <span class="text-sm font-bold text-white">${ai.cantidad}${ai.insumo?.unidad ? ' ' + escHtml(ai.insumo.unidad) : ''}</span>
+          ${isAdmin ? `<button onclick="deleteAsigInsumo('${ai.id}','${asigId}')"
+            class="text-red-400/50 hover:text-red-400 text-lg leading-none px-1">×</button>` : ''}
+        </div>
+      </div>`).join('')
+    : `<p class="text-xs text-slate-600 py-1">Sin insumos asignados a esta confeccionista aún.</p>`;
+
+  // Formulario para asignar (solo admin, solo si hay insumos globales definidos)
+  let formHtml = '';
+  if (isAdmin && globalInsumos.length) {
+    formHtml = `
+    <div class="mt-2 pt-2 border-t border-zinc-800/60">
+      <p class="text-xs text-slate-500 mb-1.5">Asignar cantidad:</p>
+      <div class="grid grid-cols-12 gap-1.5">
+        <select id="ai-insumo-${asigId}"
+          class="col-span-7 px-2 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white text-xs focus:outline-none focus:border-gold-500">
+          <option value="">Insumo...</option>
+          ${globalInsumos.map(i => `<option value="${i.id}">${escHtml(i.nombre)}${i.unidad ? ' (' + escHtml(i.unidad) + ')' : ''}</option>`).join('')}
+        </select>
+        <input type="number" id="ai-cant-${asigId}" placeholder="Cant." min="1"
+          class="col-span-3 px-2 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white text-xs text-center focus:outline-none focus:border-gold-500" />
+        <button onclick="saveAsigInsumo('${asigId}')"
+          class="col-span-2 py-2 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-lg text-xs transition-colors">+</button>
+      </div>
+    </div>`;
+  } else if (isAdmin && !globalInsumos.length) {
+    formHtml = `<p class="text-xs text-slate-600 mt-1">Agrega insumos al pedido arriba para poder asignarlos.</p>`;
+  }
+
+  return `
+  <div class="px-4 py-3 border-t border-zinc-800">
+    <p class="text-xs font-semibold text-slate-400 mb-2">🧵 ${isAdmin ? 'Insumos de esta confeccionista' : 'Insumos que recibiste'}</p>
+    ${listaHtml}
+    ${formHtml}
+  </div>`;
+}
+
+async function saveAsigInsumo(asigId) {
+  const insumoId = document.getElementById(`ai-insumo-${asigId}`)?.value;
+  const cantidad = parseInt(document.getElementById(`ai-cant-${asigId}`)?.value) || 0;
+
+  if (!insumoId) { showToast('Selecciona un insumo', 'error'); return; }
+  if (cantidad < 1) { showToast('La cantidad debe ser mayor a 0', 'error'); return; }
+
+  const { error } = await sb.from('asignacion_insumos')
+    .upsert(
+      { asignacion_id: asigId, insumo_id: insumoId, cantidad },
+      { onConflict: 'asignacion_id,insumo_id' }
+    );
+
+  if (error) { showToast('Error al guardar insumo', 'error'); console.error(error); return; }
+
+  const selEl = document.getElementById(`ai-insumo-${asigId}`);
+  const cantEl = document.getElementById(`ai-cant-${asigId}`);
+  if (selEl) selEl.value = '';
+  if (cantEl) cantEl.value = '';
+  showToast('✅ Insumo asignado');
+  await loadPrendaDetail(state.currentPrenda.id, false);
+}
+
+async function deleteAsigInsumo(asigInsumoId, asigId) {
+  confirmAction('¿Quitar insumo?', 'Se eliminará la asignación de este insumo a la confeccionista.', async () => {
+    const { error } = await sb.from('asignacion_insumos').delete().eq('id', asigInsumoId);
     if (error) { showToast('Error al eliminar', 'error'); return; }
     showToast('Insumo eliminado');
     await loadPrendaDetail(state.currentPrenda.id, false);
@@ -712,6 +815,7 @@ function renderAsignacionesAdmin(asigs, container) {
             ${a.nota_confeccionista ? `<p class="text-blue-300/80 text-xs mt-2">💬 Conf: <em>${escHtml(a.nota_confeccionista)}</em></p>` : ''}
             ${a.rechazo_nota ? `<p class="text-red-400/80 text-xs mt-2">✕ Rechazo: <em>${escHtml(a.rechazo_nota)}</em></p>` : ''}
             ${a.confirmacion_nota ? `<p class="text-green-400/70 text-xs mt-1">✅ Nota confirm.: <em>${escHtml(a.confirmacion_nota)}</em></p>` : ''}
+            ${renderAsigInsumos(a.id, true)}
             ${renderFotosGaleria(a.id, true)}
           </div>
 
@@ -763,24 +867,7 @@ function renderAsignacionesConf(asigs, container) {
     return;
   }
 
-  // Mostrar insumos de la prenda (solo lectura)
-  const insumos = state.currentInsumos || [];
-  let insumosHtml = '';
-  if (insumos.length) {
-    insumosHtml = `
-    <div class="card p-4 mb-3">
-      <p class="text-sm font-bold text-slate-300 mb-2">📦 Insumos que recibiste</p>
-      <div class="space-y-1">
-        ${insumos.map(i => `
-        <div class="flex justify-between items-center py-1.5 border-b border-zinc-800/60 last:border-0">
-          <span class="text-sm text-slate-300">${escHtml(i.nombre)}</span>
-          <span class="text-base font-bold text-white">${i.cantidad}${i.unidad ? ' ' + escHtml(i.unidad) : ''}</span>
-        </div>`).join('')}
-      </div>
-    </div>`;
-  }
-
-  container.innerHTML = insumosHtml + asigs.map(a => {
+  container.innerHTML = asigs.map(a => {
     const curva    = a.curva_tallas    || {};
     const progreso = a.tallas_progreso || {};
     const tieneTallas = TODAS_TALLAS.some(t => (curva[t] || 0) > 0);
@@ -945,6 +1032,7 @@ function renderAsignacionesConf(asigs, container) {
         </button>
       </div>
 
+      ${renderAsigInsumos(a.id, false)}
       ${renderFotosGaleria(a.id, false)}
     </div>`;
   }).join('');
@@ -1505,6 +1593,7 @@ function showMainView(viewId) {
     document.getElementById(v)?.classList.toggle('active', v === viewId));
 
   document.getElementById('btn-back').classList.add('hidden');
+  document.getElementById('btn-refresh').classList.add('hidden');
   document.getElementById('header-logo').style.display = 'block';
 
   const isAdmin   = state.profile?.role === 'admin';
@@ -1532,6 +1621,8 @@ function showDetailView(viewId, backView) {
 
   document.getElementById('btn-back').classList.remove('hidden');
   document.getElementById('header-logo').style.display = 'none';
+  // Mostrar botón actualizar solo en detalle de prenda
+  document.getElementById('btn-refresh').classList.toggle('hidden', viewId !== 'view-prenda-detail');
 
   const isAdmin   = state.profile?.role === 'admin';
   const actionBtn = document.getElementById('btn-header-action');
@@ -1819,4 +1910,19 @@ function exportarExcel() {
 
   XLSX.writeFile(wb, `Talitha_Confeccionistas_${fechaHoy}.xlsx`);
   showToast('📊 Excel generado y descargado');
+}
+
+// ================================================================
+// 20. ACTUALIZACIÓN MANUAL DEL DETALLE
+// ================================================================
+async function refreshDetail() {
+  if (!state.currentPrenda) return;
+  const btn = document.getElementById('btn-refresh');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.5'; }
+  try {
+    await loadPrendaDetail(state.currentPrenda.id, false);
+    showToast('✅ Actualizado');
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  }
 }
