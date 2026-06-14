@@ -108,9 +108,15 @@
       </div>
       <div>
         <label class="text-xs text-slate-500 mb-1 block font-medium">Contraseña</label>
-        <input id="login-password" type="password" placeholder="••••••••"
-          class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500"
-          onkeypress="if(event.key==='Enter')handleLogin()" />
+        <div class="relative">
+          <input id="login-password" type="password" placeholder="••••••••"
+            class="w-full px-4 py-3 pr-12 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500"
+            onkeypress="if(event.key==='Enter')handleLogin()" />
+          <button type="button" id="btn-toggle-pass" onclick="togglePasswordVisibility()"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-1">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
       </div>
       <p id="login-error" class="text-red-400 text-xs hidden"></p>
       <button onclick="handleLogin()" id="btn-login" class="btn-gold">Ingresar</button>
@@ -328,6 +334,61 @@
         <label class="text-xs text-slate-400 mb-1 block">Cantidad asignada *</label>
         <input id="asig-cantidad" type="number" placeholder="0" min="1"
           class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500 text-center text-lg font-bold" />
+      </div>
+
+      <!-- TALLAS -->
+      <div class="pt-2 border-t border-zinc-800">
+        <p class="text-xs text-slate-400 font-semibold mb-1">📐 Curva de tallas <span class="text-slate-600 font-normal">(opcional — deja en 0 si no aplica)</span></p>
+        <div class="mb-2">
+          <p class="text-xs text-slate-500 mb-1">👧 Niño</p>
+          <div class="grid grid-cols-5 gap-1">
+            <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">8</div>
+              <input type="number" id="modal-talla-8" min="0" placeholder="0"
+                onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
+            <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">10</div>
+              <input type="number" id="modal-talla-10" min="0" placeholder="0"
+                onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
+            <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">12</div>
+              <input type="number" id="modal-talla-12" min="0" placeholder="0"
+                onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
+            <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">14</div>
+              <input type="number" id="modal-talla-14" min="0" placeholder="0"
+                onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
+            <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">16</div>
+              <input type="number" id="modal-talla-16" min="0" placeholder="0"
+                onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
+          </div>
+        </div>
+        <div>
+          <p class="text-xs text-slate-500 mb-1">👔 Adulto</p>
+          <div class="grid grid-cols-5 gap-1">
+            <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">S</div>
+              <input type="number" id="modal-talla-S" min="0" placeholder="0"
+                onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
+            <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">M</div>
+              <input type="number" id="modal-talla-M" min="0" placeholder="0"
+                onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
+            <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">L</div>
+              <input type="number" id="modal-talla-L" min="0" placeholder="0"
+                onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
+            <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">XL</div>
+              <input type="number" id="modal-talla-XL" min="0" placeholder="0"
+                onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
+            <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">2XL</div>
+              <input type="number" id="modal-talla-2XL" min="0" placeholder="0"
+                onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="flex gap-3 mt-6">
