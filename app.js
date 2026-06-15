@@ -724,6 +724,66 @@ function renderTallasResumen(curva, progreso, isAdmin, confirmadas = {}) {
 }
 
 // ================================================================
+// 10e. HELPER — bloque de confirmación por talla (extrae nesting)
+// ================================================================
+function renderConfirmacionEntrega(a, porConfirmar, progreso, tallas_conf_actual, hasTallasPendientes, reportado, confirmado, devols) {
+  if (porConfirmar <= 0) {
+    if (confirmado > 0) {
+      const terminadasEfectivas = Math.max(0, confirmado - devols);
+      return `<p class="text-xs text-green-400/70 mt-2 px-1">✅ ${confirmado} aceptadas · ${terminadasEfectivas} netas (−${devols} devueltas)</p>`;
+    }
+    return '';
+  }
+
+  const fechaHtml = a.fecha_entrega
+    ? ` · <span class="text-slate-400">Entrega: ${formatDate(a.fecha_entrega)}</span>`
+    : '';
+
+  let inputsHtml = '';
+  if (hasTallasPendientes) {
+    const rows = TODAS_TALLAS
+      .filter(t => (progreso[t] || 0) > 0)
+      .map(t => {
+        const rep_t  = progreso[t] || 0;
+        const conf_t = tallas_conf_actual[t] || 0;
+        const pend_t = Math.max(0, rep_t - conf_t);
+        if (pend_t <= 0) return '';
+        return '<div class="text-center">'
+          + '<div class="text-xs text-slate-400 mb-0.5">' + t + '</div>'
+          + '<div class="text-xs text-slate-600 mb-0.5">Rep:' + rep_t + '</div>'
+          + '<input type="number" id="ctalla-' + a.id + '-' + t + '" value="' + pend_t + '" min="0" max="' + pend_t + '"'
+          + ' onfocus="this.select()"'
+          + ' class="w-full px-0.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" />'
+          + '</div>';
+      })
+      .join('');
+    inputsHtml = '<p class="text-xs text-slate-500 mb-2">Ajusta las cantidades que aceptas por talla:</p>'
+      + '<div class="grid grid-cols-5 gap-1 mb-3">' + rows + '</div>';
+  } else {
+    inputsHtml = '<p class="text-xs text-slate-500 mb-2">¿Cuántas aceptas ahora? (máx. ' + porConfirmar + ')</p>'
+      + '<div class="flex gap-2 items-center mb-2">'
+      + '<input type="number" id="confirm-cant-' + a.id + '" value="' + porConfirmar + '" min="1" max="' + porConfirmar + '"'
+      + ' onfocus="this.select()" oninput="validarCantidadConfirm(\'' + a.id + '\',' + porConfirmar + ')"'
+      + ' class="w-20 px-2 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-center font-bold text-lg focus:outline-none focus:border-gold-500" />'
+      + '<span id="confirm-warn-' + a.id + '" class="text-xs text-red-400 hidden">⚠️ Máximo ' + porConfirmar + '</span>'
+      + '</div>';
+  }
+
+  return '<div class="mt-3 p-3 bg-gold-500/5 border border-gold-500/20 rounded-xl">'
+    + '<p class="text-xs text-gold-400/90 font-semibold mb-2">📦 Por confirmar: <strong>' + porConfirmar + '</strong> terminadas' + fechaHtml + '</p>'
+    + inputsHtml
+    + '<textarea id="confirm-nota-' + a.id + '" rows="2" placeholder="Nota opcional (ej: calidad ok, revisar costuras...)"'
+    + ' class="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700/60 text-white text-xs focus:outline-none focus:border-gold-500 resize-none mb-2"></textarea>'
+    + '<div class="flex gap-2">'
+    + '<button onclick="confirmarEntrega(\'' + a.id + '\',' + hasTallasPendientes + ')"'
+    + ' class="flex-1 py-2.5 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-xl text-xs transition-colors">✅ Confirmar recibido</button>'
+    + '<button onclick="rechazarEntrega(\'' + a.id + '\',' + reportado + ')"'
+    + ' class="px-3 py-2.5 bg-zinc-800 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-xs transition-colors">✕ Rechazar todo</button>'
+    + '</div>'
+    + '</div>';
+}
+
+// ================================================================
 // 11. RENDER — ADMIN
 // ================================================================
 function renderAsignacionesAdmin(asigs, container) {
@@ -780,8 +840,9 @@ function renderAsignacionesAdmin(asigs, container) {
               </div>
             </div>
 
-            <!-- Tallas resumen — visible si hay curva O si el confeccionista ya reportó tallas -->
-            ${renderTallasResumen(curva, progreso, true, tallas_conf_actual)}
+            <!-- Tallas: resumen si hay datos, hint si no está configurado -->
+            ${renderTallasResumen(curva, progreso, true, tallas_conf_actual) ||
+              '<p class="text-xs text-slate-600/70 mt-1.5 mb-1 px-0.5">📐 Sin curva de tallas · Toca ✏️ para configurar</p>'}
 
             <!-- CONTEO VISUAL -->
             <div class="grid grid-cols-4 gap-1.5 mt-2 text-xs text-center">
@@ -817,58 +878,8 @@ function renderAsignacionesAdmin(asigs, container) {
               </div>
             </div>
 
-            <!-- CONFIRMACIÓN DE ENTREGA — individual por talla o total -->
-            ${porConfirmar > 0 ? `
-            <div class="mt-3 p-3 bg-gold-500/5 border border-gold-500/20 rounded-xl">
-              <p class="text-xs text-gold-400/90 font-semibold mb-2">
-                📦 Por confirmar: <strong>${porConfirmar}</strong> terminadas
-                ${a.fecha_entrega ? ` · <span class="text-slate-400">Entrega: ${formatDate(a.fecha_entrega)}</span>` : ''}
-              </p>
-
-              ${hasTallasPendientes ? `
-              <!-- CONFIRMACIÓN POR TALLA -->
-              <p class="text-xs text-slate-500 mb-2">Ajusta las cantidades que aceptas por talla:</p>
-              <div class="grid grid-cols-5 gap-1 mb-3">
-                ${TODAS_TALLAS.filter(t => (progreso[t] || 0) > 0).map(t => {
-                  const rep_t  = progreso[t] || 0;
-                  const conf_t = tallas_conf_actual[t] || 0;
-                  const pend_t = Math.max(0, rep_t - conf_t);
-                  if (pend_t <= 0) return '';
-                  return `
-                  <div class="text-center">
-                    <div class="text-xs text-slate-400 mb-0.5">${t}</div>
-                    <div class="text-xs text-slate-600 mb-0.5">Rep:${rep_t}</div>
-                    <input type="number" id="ctalla-${a.id}-${t}" value="${pend_t}" min="0" max="${pend_t}"
-                      onfocus="this.select()"
-                      class="w-full px-0.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" />
-                  </div>`;
-                }).join('')}
-              </div>` : `
-              <!-- CONFIRMACIÓN TOTAL (sin tallas) -->
-              <p class="text-xs text-slate-500 mb-2">¿Cuántas aceptas ahora? (máx. ${porConfirmar})</p>
-              <div class="flex gap-2 items-center mb-2">
-                <input type="number" id="confirm-cant-${a.id}" value="${porConfirmar}" min="1" max="${porConfirmar}"
-                  onfocus="this.select()"
-                  oninput="validarCantidadConfirm('${a.id}',${porConfirmar})"
-                  class="w-20 px-2 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-center font-bold text-lg focus:outline-none focus:border-gold-500" />
-                <span id="confirm-warn-${a.id}" class="text-xs text-red-400 hidden">⚠️ Máximo ${porConfirmar}</span>
-              </div>`}
-
-              <textarea id="confirm-nota-${a.id}" rows="2"
-                placeholder="Nota opcional (ej: calidad ok, revisar costuras...)"
-                class="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700/60 text-white text-xs focus:outline-none focus:border-gold-500 resize-none mb-2"></textarea>
-              <div class="flex gap-2">
-                <button onclick="confirmarEntrega('${a.id}',${hasTallasPendientes})"
-                  class="flex-1 py-2.5 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-xl text-xs transition-colors">
-                  ✅ Confirmar recibido
-                </button>
-                <button onclick="rechazarEntrega('${a.id}',${reportado})"
-                  class="px-3 py-2.5 bg-zinc-800 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-xs transition-colors">
-                  ✕ Rechazar todo
-                </button>
-              </div>
-            </div>` : confirmado > 0 ? `
-            <p class="text-xs text-green-400/70 mt-2 px-1">✅ ${confirmado} aceptadas · ${terminadasEfectivas} netas (−${devols} devueltas)</p>` : ''}
+            <!-- CONFIRMACIÓN DE ENTREGA — delega a función para evitar anidamiento profundo -->
+            ${renderConfirmacionEntrega(a, porConfirmar, progreso, tallas_conf_actual, hasTallasPendientes, reportado, confirmado, devols)}
 
             <!-- APROBACIÓN DE "NO PUDE CONFECCIONAR" -->
             ${noConf > 0 ? (() => {
@@ -1159,6 +1170,25 @@ function confirmDeletePrenda(prendaId) {
 // ================================================================
 // 14. CRUD — ASIGNACIONES
 // ================================================================
+// Auto-suma tallas en el modal de nueva asignación → actualiza el campo cantidad
+function syncTallasTotal() {
+  const total = TODAS_TALLAS.reduce((sum, t) => {
+    return sum + (parseInt(document.getElementById(`modal-talla-${t}`)?.value) || 0);
+  }, 0);
+  const cantEl = document.getElementById('asig-cantidad');
+  if (cantEl && total > 0) cantEl.value = total;
+  // Badge visible con el total calculado
+  const badge = document.getElementById('asig-tallas-total-badge');
+  if (badge) {
+    if (total > 0) {
+      badge.textContent = `Total: ${total}`;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+  }
+}
+
 async function saveNewAsignacion() {
   const confId      = document.getElementById('asig-confeccionista').value;
   const parte       = document.getElementById('asig-parte').value.trim();
@@ -1653,6 +1683,9 @@ function openNewAsignacionModal() {
     const el = document.getElementById(`modal-talla-${t}`);
     if (el) el.value = '';
   });
+  // Resetear badge del total
+  const badge = document.getElementById('asig-tallas-total-badge');
+  if (badge) badge.classList.add('hidden');
   openModal('modal-new-asignacion');
   setTimeout(() => document.getElementById('asig-confeccionista').focus(), 200);
 }

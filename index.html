@@ -334,37 +334,40 @@
         <input id="asig-nota" type="text" placeholder="Instrucciones especiales..."
           class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500" />
       </div>
-      <div>
-        <label class="text-xs text-slate-400 mb-1 block">Cantidad asignada *</label>
-        <input id="asig-cantidad" type="number" placeholder="0" min="1"
-          class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500 text-center text-lg font-bold" />
-      </div>
-
-      <!-- TALLAS -->
+      <!-- TALLAS — primero la curva, el total se calcula automático -->
       <div class="pt-2 border-t border-zinc-800">
-        <p class="text-xs text-slate-400 font-semibold mb-1">📐 Curva de tallas <span class="text-slate-600 font-normal">(opcional — deja en 0 si no aplica)</span></p>
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-xs text-gold-400 font-semibold">📐 Curva de tallas</p>
+          <span id="asig-tallas-total-badge" class="hidden text-xs bg-gold-500/20 text-gold-400 font-bold px-2 py-0.5 rounded-full"></span>
+        </div>
+        <p class="text-xs text-slate-500 mb-2">Ingresa cuántas piezas por talla · el total se calcula solo</p>
         <div class="mb-2">
           <p class="text-xs text-slate-500 mb-1">👧 Niño</p>
           <div class="grid grid-cols-5 gap-1">
             <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">8</div>
               <input type="number" id="modal-talla-8" min="0" placeholder="0"
                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                oninput="syncTallasTotal()"
                 class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
             <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">10</div>
               <input type="number" id="modal-talla-10" min="0" placeholder="0"
                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                oninput="syncTallasTotal()"
                 class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
             <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">12</div>
               <input type="number" id="modal-talla-12" min="0" placeholder="0"
                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                oninput="syncTallasTotal()"
                 class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
             <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">14</div>
               <input type="number" id="modal-talla-14" min="0" placeholder="0"
                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                oninput="syncTallasTotal()"
                 class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
             <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">16</div>
               <input type="number" id="modal-talla-16" min="0" placeholder="0"
                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                oninput="syncTallasTotal()"
                 class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
           </div>
         </div>
@@ -374,25 +377,39 @@
             <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">S</div>
               <input type="number" id="modal-talla-S" min="0" placeholder="0"
                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                oninput="syncTallasTotal()"
                 class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
             <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">M</div>
               <input type="number" id="modal-talla-M" min="0" placeholder="0"
                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                oninput="syncTallasTotal()"
                 class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
             <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">L</div>
               <input type="number" id="modal-talla-L" min="0" placeholder="0"
                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                oninput="syncTallasTotal()"
                 class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
             <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">XL</div>
               <input type="number" id="modal-talla-XL" min="0" placeholder="0"
                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                oninput="syncTallasTotal()"
                 class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
             <div class="text-center"><div class="text-xs text-slate-500 mb-0.5">2XL</div>
               <input type="number" id="modal-talla-2XL" min="0" placeholder="0"
                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
+                oninput="syncTallasTotal()"
                 class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" /></div>
           </div>
         </div>
+      </div>
+
+      <!-- TOTAL: se muestra calculado o se puede editar manualmente -->
+      <div class="pt-2 border-t border-zinc-800">
+        <label class="text-xs text-slate-400 mb-1 block">Cantidad total asignada *
+          <span class="text-slate-600 font-normal">(se calcula sola al llenar tallas)</span>
+        </label>
+        <input id="asig-cantidad" type="number" placeholder="0" min="1"
+          class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500 text-center text-lg font-bold" />
       </div>
     </div>
     <div class="flex gap-3 mt-6">
