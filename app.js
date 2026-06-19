@@ -30,7 +30,6 @@ const state = {
   currentPrenda:       null,
   currentAsignaciones: [],
   currentFotos:        {},
-  currentInsumos:      [],
   currentAsigInsumos:  {},
   exportPrendas:       [],
   exportAsignaciones:  [],
@@ -144,7 +143,7 @@ async function init() {
 function resetState() {
   Object.assign(state, {
     user:null, profile:null, prendas:[], confeccionistas:[],
-    currentPrenda:null, currentAsignaciones:[], currentInsumos:[], currentAsigInsumos:{},
+    currentPrenda:null, currentAsignaciones:[], currentAsigInsumos:{},
     currentFilter:'todas', currentNav:'view-prendas', prevView:null, pendingConfirm:null
   });
   if (state.realtimeSub) { sb.removeChannel(state.realtimeSub); state.realtimeSub = null; }
@@ -231,7 +230,6 @@ function setupRealtime() {
         state.currentPrenda = null;
         state.currentAsignaciones = [];
         state.currentFotos = {};
-        state.currentInsumos = [];
         state.currentAsigInsumos = {};
         goBack();
       }
@@ -243,9 +241,6 @@ function setupRealtime() {
       if (state.currentPrenda) loadPrendaDetail(state.currentPrenda.id, false);
     })
     .on('postgres_changes', { event:'*', schema:'public', table:'asignacion_fotos' }, () => {
-      if (state.currentPrenda) loadPrendaDetail(state.currentPrenda.id, false);
-    })
-    .on('postgres_changes', { event:'*', schema:'public', table:'insumos' }, () => {
       if (state.currentPrenda) loadPrendaDetail(state.currentPrenda.id, false);
     })
     .on('postgres_changes', { event:'*', schema:'public', table:'asignacion_insumos' }, () => {
@@ -287,7 +282,6 @@ async function loadPrendaDetail(prendaId, navigate = true) {
       state.currentPrenda = null;
       state.currentAsignaciones = [];
       state.currentFotos = {};
-      state.currentInsumos = [];
       state.currentAsigInsumos = {};
       goBack();
     }
@@ -316,18 +310,13 @@ async function loadPrendaDetail(prendaId, navigate = true) {
     });
   }
 
-  // Insumos globales de la prenda (total del pedido)
-  const { data: insumos } = await sb.from('insumos')
-    .select('*')
-    .eq('prenda_id', prendaId)
-    .order('created_at');
-
-  // Insumos asignados por confeccionista (tabla asignacion_insumos)
+  // Insumos por asignación — cada confeccionista tiene los suyos (nombre + cantidad propios)
   const asigInsumosMap = {};
   if (asigIds.length) {
     const { data: asigInsumos } = await sb.from('asignacion_insumos')
-      .select('*, insumo:insumos(nombre, unidad)')
-      .in('asignacion_id', asigIds);
+      .select('*')
+      .in('asignacion_id', asigIds)
+      .order('created_at');
     (asigInsumos || []).forEach(ai => {
       (asigInsumosMap[ai.asignacion_id] ||= []).push(ai);
     });
@@ -336,7 +325,6 @@ async function loadPrendaDetail(prendaId, navigate = true) {
   state.currentPrenda       = prenda;
   state.currentAsignaciones = asigs || [];
   state.currentFotos        = fotosPorAsig;
-  state.currentInsumos      = insumos || [];
   state.currentAsigInsumos  = asigInsumosMap;
   renderPrendaDetail();
   if (navigate) showDetailView('view-prenda-detail', state.currentNav);
@@ -407,7 +395,6 @@ function renderPrendaDetail() {
       </div>
       ${prenda.descripcion ? `<p class="text-slate-400 text-sm mb-2">${escHtml(prenda.descripcion)}</p>` : ''}
       ${isAdmin ? `<p class="text-sm text-slate-500">📦 <strong class="text-white">${Number(prenda.total_unidades).toLocaleString()}</strong> unidades totales en el pedido</p>` : ''}
-      ${isAdmin ? renderInsumos(prenda.id, true) : ''}
       ${isAdmin ? `
       <div class="mt-3 pt-3 border-t border-zinc-800 flex items-center gap-2 flex-wrap">
         ${nextStatus ? `<button onclick="updatePrendaStatus('${prenda.id}','${nextStatus}')"
@@ -480,74 +467,11 @@ function renderTableroGeneral(prenda, asigs) {
 }
 
 // ================================================================
-// 10c. INSUMOS — render y CRUD
-// ================================================================
-function renderInsumos(prendaId, isAdmin) {
-  const insumos = state.currentInsumos || [];
-  if (!insumos.length && !isAdmin) return '';
-
-  const lista = insumos.length
-    ? insumos.map(i => `
-      <div class="flex items-center justify-between py-1.5 border-b border-zinc-800/60 last:border-0">
-        <span class="text-sm text-slate-300">${escHtml(i.nombre)}</span>
-        <div class="flex items-center gap-2">
-          <span class="text-sm font-bold text-white">${i.cantidad}${i.unidad ? ' ' + escHtml(i.unidad) : ''}</span>
-          ${isAdmin ? `<button onclick="deleteInsumo('${i.id}')" class="text-red-400/50 hover:text-red-400 text-lg leading-none px-1">×</button>` : ''}
-        </div>
-      </div>`).join('')
-    : `<p class="text-xs text-slate-600 py-1">Sin insumos registrados aún.</p>`;
-
-  return `
-  <div class="mt-3 pt-3 border-t border-zinc-800">
-    <p class="text-xs font-semibold text-slate-400 mb-2">📦 Insumos del pedido <span class="text-slate-600 font-normal">(total global)</span></p>
-    ${lista}
-    ${isAdmin ? `
-    <div class="mt-3 grid grid-cols-12 gap-1.5">
-      <input type="text" id="insumo-nombre" placeholder="Nombre (ej: botones)"
-        class="col-span-5 px-2.5 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white text-xs focus:outline-none focus:border-gold-500" />
-      <input type="number" id="insumo-cantidad" placeholder="Cant." min="0"
-        class="col-span-3 px-2 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white text-xs text-center focus:outline-none focus:border-gold-500" />
-      <input type="text" id="insumo-unidad" placeholder="Unidad"
-        class="col-span-2 px-2 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white text-xs focus:outline-none focus:border-gold-500" />
-      <button onclick="saveInsumo('${prendaId}')"
-        class="col-span-2 py-2 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-lg text-xs transition-colors">+</button>
-    </div>` : ''}
-  </div>`;
-}
-
-async function saveInsumo(prendaId) {
-  const nombre   = document.getElementById('insumo-nombre')?.value?.trim();
-  const cantidad = parseInt(document.getElementById('insumo-cantidad')?.value) || 0;
-  const unidad   = document.getElementById('insumo-unidad')?.value?.trim() || null;
-
-  if (!nombre)       { showToast('Escribe el nombre del insumo', 'error'); return; }
-  if (cantidad < 1)  { showToast('La cantidad debe ser mayor a 0', 'error'); return; }
-
-  const { error } = await sb.from('insumos').insert({ prenda_id: prendaId, nombre, cantidad, unidad });
-  if (error) { showToast('Error al guardar insumo', 'error'); console.error(error); return; }
-
-  document.getElementById('insumo-nombre').value    = '';
-  document.getElementById('insumo-cantidad').value  = '';
-  document.getElementById('insumo-unidad').value    = '';
-  showToast('✅ Insumo agregado');
-  await loadPrendaDetail(state.currentPrenda.id, false);
-}
-
-async function deleteInsumo(insumoId) {
-  confirmAction('¿Eliminar insumo?', 'Se eliminará este insumo de la prenda.', async () => {
-    const { error } = await sb.from('insumos').delete().eq('id', insumoId);
-    if (error) { showToast('Error al eliminar', 'error'); return; }
-    showToast('Insumo eliminado');
-    await loadPrendaDetail(state.currentPrenda.id, false);
-  });
-}
-
-// ================================================================
-// 10c-2. INSUMOS POR ASIGNACIÓN
+// 10c. INSUMOS POR ASIGNACIÓN — cada confeccionista tiene los suyos,
+// independientes entre sí (nombre + cantidad, sin catálogo compartido)
 // ================================================================
 function renderAsigInsumos(asigId, isAdmin) {
   const items = state.currentAsigInsumos?.[asigId] || [];
-  const globalInsumos = state.currentInsumos || [];
 
   // Confeccionista: solo mostrar si tiene insumos asignados
   if (!isAdmin && !items.length) return '';
@@ -555,36 +479,27 @@ function renderAsigInsumos(asigId, isAdmin) {
   const listaHtml = items.length
     ? items.map(ai => `
       <div class="flex items-center justify-between py-1.5 border-b border-zinc-800/60 last:border-0">
-        <span class="text-sm text-slate-300">${escHtml(ai.insumo?.nombre || '')}</span>
+        <span class="text-sm text-slate-300">${escHtml(ai.nombre || '')}</span>
         <div class="flex items-center gap-2">
-          <span class="text-sm font-bold text-white">${ai.cantidad}${ai.insumo?.unidad ? ' ' + escHtml(ai.insumo.unidad) : ''}</span>
+          <span class="text-sm font-bold text-white">${ai.cantidad}</span>
           ${isAdmin ? `<button onclick="deleteAsigInsumo('${ai.id}','${asigId}')"
             class="text-red-400/50 hover:text-red-400 text-lg leading-none px-1">×</button>` : ''}
         </div>
       </div>`).join('')
     : `<p class="text-xs text-slate-600 py-1">Sin insumos asignados a esta confeccionista aún.</p>`;
 
-  // Formulario para asignar (solo admin, solo si hay insumos globales definidos)
-  let formHtml = '';
-  if (isAdmin && globalInsumos.length) {
-    formHtml = `
+  const formHtml = isAdmin ? `
     <div class="mt-2 pt-2 border-t border-zinc-800/60">
-      <p class="text-xs text-slate-500 mb-1.5">Asignar cantidad:</p>
+      <p class="text-xs text-slate-500 mb-1.5">Agregar insumo a esta confeccionista:</p>
       <div class="grid grid-cols-12 gap-1.5">
-        <select id="ai-insumo-${asigId}"
-          class="col-span-7 px-2 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white text-xs focus:outline-none focus:border-gold-500">
-          <option value="">Insumo...</option>
-          ${globalInsumos.map(i => `<option value="${i.id}">${escHtml(i.nombre)}${i.unidad ? ' (' + escHtml(i.unidad) + ')' : ''}</option>`).join('')}
-        </select>
+        <input type="text" id="ai-nombre-${asigId}" placeholder="Nombre (ej: botones)"
+          class="col-span-7 px-2.5 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white text-xs focus:outline-none focus:border-gold-500" />
         <input type="number" id="ai-cant-${asigId}" placeholder="Cant." min="1"
           class="col-span-3 px-2 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white text-xs text-center focus:outline-none focus:border-gold-500" />
         <button onclick="saveAsigInsumo('${asigId}')"
           class="col-span-2 py-2 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-lg text-xs transition-colors">+</button>
       </div>
-    </div>`;
-  } else if (isAdmin && !globalInsumos.length) {
-    formHtml = `<p class="text-xs text-slate-600 mt-1">Agrega insumos al pedido arriba para poder asignarlos.</p>`;
-  }
+    </div>` : '';
 
   return `
   <div class="px-4 py-3 border-t border-zinc-800">
@@ -595,35 +510,78 @@ function renderAsigInsumos(asigId, isAdmin) {
 }
 
 async function saveAsigInsumo(asigId) {
-  const insumoId = document.getElementById(`ai-insumo-${asigId}`)?.value;
+  const nombre   = document.getElementById(`ai-nombre-${asigId}`)?.value?.trim();
   const cantidad = parseInt(document.getElementById(`ai-cant-${asigId}`)?.value) || 0;
 
-  if (!insumoId) { showToast('Selecciona un insumo', 'error'); return; }
+  if (!nombre)      { showToast('Escribe el nombre del insumo', 'error'); return; }
   if (cantidad < 1) { showToast('La cantidad debe ser mayor a 0', 'error'); return; }
 
   const { error } = await sb.from('asignacion_insumos')
-    .upsert(
-      { asignacion_id: asigId, insumo_id: insumoId, cantidad },
-      { onConflict: 'asignacion_id,insumo_id' }
-    );
+    .insert({ asignacion_id: asigId, nombre, cantidad });
 
   if (error) { showToast('Error al guardar insumo', 'error'); console.error(error); return; }
 
-  const selEl = document.getElementById(`ai-insumo-${asigId}`);
-  const cantEl = document.getElementById(`ai-cant-${asigId}`);
-  if (selEl) selEl.value = '';
-  if (cantEl) cantEl.value = '';
-  showToast('✅ Insumo asignado');
+  const nombreEl = document.getElementById(`ai-nombre-${asigId}`);
+  const cantEl   = document.getElementById(`ai-cant-${asigId}`);
+  if (nombreEl) nombreEl.value = '';
+  if (cantEl)   cantEl.value   = '';
+  showToast('✅ Insumo agregado');
   await loadPrendaDetail(state.currentPrenda.id, false);
 }
 
 async function deleteAsigInsumo(asigInsumoId, asigId) {
-  confirmAction('¿Quitar insumo?', 'Se eliminará la asignación de este insumo a la confeccionista.', async () => {
+  confirmAction('¿Quitar insumo?', 'Se eliminará este insumo de la asignación de esta confeccionista.', async () => {
     const { error } = await sb.from('asignacion_insumos').delete().eq('id', asigInsumoId);
     if (error) { showToast('Error al eliminar', 'error'); return; }
     showToast('Insumo eliminado');
     await loadPrendaDetail(state.currentPrenda.id, false);
   });
+}
+
+// ================================================================
+// 10c-2. INSUMOS EN EL MODAL "AGREGAR ASIGNACIÓN" — filas dinámicas
+// ================================================================
+let asigInsumoRowSeq = 0;
+
+function addAsigInsumoRow() {
+  const container = document.getElementById('asig-insumos-rows');
+  if (!container) return;
+  const n = asigInsumoRowSeq++;
+  const row = document.createElement('div');
+  row.className = 'grid grid-cols-12 gap-1.5 items-center';
+  row.id = `asig-insumo-row-${n}`;
+  row.innerHTML =
+    '<input type="text" id="asig-insumo-nombre-' + n + '" placeholder="Nombre (ej: botones)"'
+    + ' class="col-span-7 px-2.5 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white text-xs focus:outline-none focus:border-gold-500" />'
+    + '<input type="number" id="asig-insumo-cant-' + n + '" placeholder="Cant." min="0"'
+    + ' class="col-span-3 px-2 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white text-xs text-center focus:outline-none focus:border-gold-500" />'
+    + '<button type="button" onclick="removeAsigInsumoRow(' + n + ')"'
+    + ' class="col-span-2 text-red-400/60 hover:text-red-400 text-lg leading-none">×</button>';
+  container.appendChild(row);
+}
+
+function removeAsigInsumoRow(n) {
+  document.getElementById(`asig-insumo-row-${n}`)?.remove();
+}
+
+function resetAsigInsumoRows() {
+  const container = document.getElementById('asig-insumos-rows');
+  if (!container) return;
+  container.innerHTML = '';
+  addAsigInsumoRow();
+}
+
+function readAsigInsumoRows() {
+  const container = document.getElementById('asig-insumos-rows');
+  if (!container) return [];
+  const items = [];
+  container.querySelectorAll('[id^="asig-insumo-row-"]').forEach(row => {
+    const n = row.id.replace('asig-insumo-row-', '');
+    const nombre   = document.getElementById(`asig-insumo-nombre-${n}`)?.value?.trim();
+    const cantidad = parseInt(document.getElementById(`asig-insumo-cant-${n}`)?.value) || 0;
+    if (nombre && cantidad > 0) items.push({ nombre, cantidad });
+  });
+  return items;
 }
 
 // ================================================================
@@ -679,11 +637,12 @@ function renderTallasResumen(curva, progreso, isAdmin, confirmadas = {}) {
           const hecho = progreso[t] || 0;
           const conf  = confirmadas[t] || 0;
           const pct   = asig > 0 ? Math.min(100, Math.round(hecho/asig*100)) : 0;
+          const pctConf = asig > 0 ? Math.min(100, Math.round(conf/asig*100)) : 0;
           return `
           <div class="bg-zinc-800 rounded-lg py-1.5 px-1">
             <div class="text-slate-400 font-medium mb-0.5">${t}</div>
             <div class="text-white font-bold text-sm">${hecho}<span class="text-slate-500 font-normal">/${asig}</span></div>
-            ${conf > 0 ? `<div class="text-green-400 text-xs font-semibold">✅ ${conf}</div>` : (asig > 0 ? `<div class="text-xs ${hecho >= asig ? 'text-green-400' : 'text-slate-600'}">${pct}%</div>` : '')}
+            ${conf > 0 ? `<div class="text-green-400 text-xs font-semibold">✅ ${conf} (${pctConf}%)</div>` : (asig > 0 ? `<div class="text-xs ${hecho >= asig ? 'text-green-400' : 'text-slate-600'}">${pct}%</div>` : '')}
           </div>`;
         }).join('')}
       </div>
@@ -855,7 +814,10 @@ function renderConfirmacionEntrega(a, porConfirmar, progreso, tallas_conf_actual
   if (porConfirmar <= 0) {
     if (confirmado > 0) {
       const terminadasEfectivas = Math.max(0, confirmado - devols);
-      return `<p class="text-xs text-green-400/70 mt-2 px-1">✅ ${confirmado} aceptadas · ${terminadasEfectivas} netas (−${devols} devueltas)</p>`;
+      const asignadaTotal = Number(a.cantidad_asignada) || 0;
+      const pctConfirmado = asignadaTotal > 0 ? Math.min(100, Math.round(confirmado / asignadaTotal * 100)) : 0;
+      const pctNetas = asignadaTotal > 0 ? Math.min(100, Math.round(terminadasEfectivas / asignadaTotal * 100)) : 0;
+      return `<p class="text-xs text-green-400/70 mt-2 px-1">✅ ${confirmado} aceptadas (${pctConfirmado}%) · ${terminadasEfectivas} netas (${pctNetas}%) (−${devols} devueltas)</p>`;
     }
     return '';
   }
@@ -946,7 +908,10 @@ function renderAsignacionesAdmin(asigs, container) {
         const porConfirmar = Math.max(0, reportado - confirmado);
         // Terminadas efectivas y pendientes para display admin
         const terminadasEfectivas = Math.max(0, confirmado - devols);
-        const pendientes = Math.max(0, Number(a.cantidad_asignada) - reportado);
+        const asignadaTotal = Number(a.cantidad_asignada) || 0;
+        const pendientes = Math.max(0, asignadaTotal - reportado);
+        // % de lo asignado que ya fue aceptado/confirmado por el admin
+        const pctAceptadas = asignadaTotal > 0 ? Math.min(100, Math.round(confirmado / asignadaTotal * 100)) : 0;
 
         return `
         <div class="border-b border-zinc-900/80 last:border-0">
@@ -991,7 +956,7 @@ function renderAsignacionesAdmin(asigs, container) {
             <div class="grid grid-cols-3 gap-1.5 mt-1.5 text-xs text-center">
               <div class="bg-zinc-800 rounded-lg p-2">
                 <div class="text-green-400 mb-0.5">✅ Aceptadas</div>
-                <div class="text-white font-bold text-base">${confirmado}</div>
+                <div class="text-white font-bold text-base">${confirmado} <span class="text-xs font-semibold">(${pctAceptadas}%)</span></div>
               </div>
               <div class="bg-zinc-800 rounded-lg p-2">
                 <div class="text-red-400 mb-0.5">🔄 Devueltas</div>
@@ -1351,13 +1316,26 @@ async function saveNewAsignacion() {
     return;
   }
 
+  // Insumos específicos para esta confeccionista (opcional)
+  const insumoRows = readAsigInsumoRows();
+
   const prendaId = state.currentPrenda.id;
-  const { error } = await sb.from('asignaciones').insert({
+  const { data: newAsig, error } = await sb.from('asignaciones').insert({
     prenda_id: prendaId, confeccionista_id: confId,
     parte, descripcion, nota, cantidad_asignada: cantidad,
     curva_tallas
-  });
+  }).select('id').single();
   if (error) { showToast('Error al guardar asignación', 'error'); console.error(error); return; }
+
+  if (insumoRows.length && newAsig?.id) {
+    const { error: insErr } = await sb.from('asignacion_insumos').insert(
+      insumoRows.map(r => ({ asignacion_id: newAsig.id, nombre: r.nombre, cantidad: r.cantidad }))
+    );
+    if (insErr) {
+      console.error(insErr);
+      showToast('Asignación creada, pero hubo un error al guardar los insumos', 'error');
+    }
+  }
 
   if (state.currentPrenda.status === 'por_procesar') {
     await sb.from('prendas').update({ status: 'en_proceso' }).eq('id', prendaId);
@@ -1372,6 +1350,7 @@ async function saveNewAsignacion() {
     const el = document.getElementById(`modal-talla-${t}`);
     if (el) el.value = '';
   });
+  resetAsigInsumoRows();
   showToast('✅ Asignación guardada');
   await loadPrendaDetail(prendaId, false);
   await loadPrendas();
@@ -1877,6 +1856,8 @@ function openNewAsignacionModal() {
   // Resetear badge del total
   const badge = document.getElementById('asig-tallas-total-badge');
   if (badge) badge.classList.add('hidden');
+  // Resetear filas de insumos a una sola fila vacía
+  resetAsigInsumoRows();
   openModal('modal-new-asignacion');
   setTimeout(() => document.getElementById('asig-confeccionista').focus(), 200);
 }
