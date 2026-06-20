@@ -35,6 +35,29 @@ self.addEventListener('fetch', event => {
     );
     return;
   }
+
+  // El "shell" de la app (HTML + app.js) siempre se busca primero en la red,
+  // para que al reabrir la app con conexión SIEMPRE se cargue la versión más
+  // reciente publicada, sin depender de que alguien cambie CACHE_NAME a mano.
+  // Solo si no hay conexión se usa la copia guardada (modo offline).
+  const esAppShell = url.origin === self.location.origin &&
+    (url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/app.js');
+
+  if (esAppShell) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => caches.match(event.request).then(cached => cached || caches.match('/index.html')))
+    );
+    return;
+  }
+
+  // Resto de archivos (íconos, manifest, librerías externas): primero caché,
+  // ya que casi nunca cambian y así la app carga más rápido.
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
