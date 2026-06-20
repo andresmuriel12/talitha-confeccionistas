@@ -423,7 +423,9 @@ function calcPrendaStats(prenda, asigs) {
     devoluciones += Number(a.cantidad_devoluciones) || 0;
     if (a.no_conf_estado === 'aprobado') noConfAprobadas += Number(a.cantidad_no_confeccionadas) || 0;
   });
-  const confirmadasNetas = Math.max(0, confirmadas - devoluciones);
+  // cantidad_confirmada ya queda neta de devoluciones (se resta en el origen), así
+  // que no se vuelve a restar "devoluciones" aquí para evitar doble conteo.
+  const confirmadasNetas = confirmadas;
   const totalAjustado    = Math.max(0, total - noConfAprobadas);
   const pendientes       = Math.max(0, totalAjustado - confirmadasNetas);
   const avance           = totalAjustado > 0 ? Math.round((confirmadasNetas / totalAjustado) * 100) : 0;
@@ -813,11 +815,10 @@ function syncDevolucionesTotal(asigId) {
 function renderConfirmacionEntrega(a, porConfirmar, progreso, tallas_conf_actual, hasTallasPendientes, reportado, confirmado, devols) {
   if (porConfirmar <= 0) {
     if (confirmado > 0) {
-      const terminadasEfectivas = Math.max(0, confirmado - devols);
       const asignadaTotal = Number(a.cantidad_asignada) || 0;
       const pctConfirmado = asignadaTotal > 0 ? Math.min(100, Math.round(confirmado / asignadaTotal * 100)) : 0;
-      const pctNetas = asignadaTotal > 0 ? Math.min(100, Math.round(terminadasEfectivas / asignadaTotal * 100)) : 0;
-      return `<p class="text-xs text-green-400/70 mt-2 px-1">✅ ${confirmado} aceptadas (${pctConfirmado}%) · ${terminadasEfectivas} netas (${pctNetas}%) (−${devols} devueltas)</p>`;
+      const devolsTxt = devols > 0 ? ` · 🔄 ${devols} devueltas` : '';
+      return `<p class="text-xs text-green-400/70 mt-2 px-1">✅ ${confirmado} aceptadas (${pctConfirmado}%)${devolsTxt}</p>`;
     }
     return '';
   }
@@ -837,35 +838,51 @@ function renderConfirmacionEntrega(a, porConfirmar, progreso, tallas_conf_actual
         if (pend_t <= 0) return '';
         return '<div class="text-center">'
           + '<div class="text-xs text-slate-400 mb-0.5">' + t + '</div>'
-          + '<div class="text-xs text-slate-600 mb-0.5">Rep:' + rep_t + '</div>'
+          + '<div class="text-xs text-slate-600 mb-0.5">Pend:' + pend_t + '</div>'
           + '<input type="number" id="ctalla-' + a.id + '-' + t + '" value="' + pend_t + '" min="0" max="' + pend_t + '"'
           + ' onfocus="this.select()"'
           + ' class="w-full px-0.5 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" />'
+          + '<div class="text-[10px] text-slate-600 mt-0.5">Acepta</div>'
+          + '<input type="number" id="rtalla-' + a.id + '-' + t + '" value="0" min="0" max="' + pend_t + '"'
+          + ' onfocus="this.select()"'
+          + ' class="w-full mt-1 px-0.5 py-1.5 rounded-lg bg-zinc-800 border border-red-900/40 text-red-300 text-sm font-bold text-center focus:outline-none focus:border-red-500" />'
+          + '<div class="text-[10px] text-slate-600 mt-0.5">Rechaza</div>'
           + '</div>';
       })
       .join('');
-    inputsHtml = '<p class="text-xs text-slate-500 mb-2">Ajusta las cantidades que aceptas por talla:</p>'
+    inputsHtml = '<p class="text-xs text-slate-500 mb-2">Ajusta cuántas aceptas y cuántas rechazas por talla:</p>'
       + '<div class="grid grid-cols-5 gap-1 mb-3">' + rows + '</div>';
   } else {
-    inputsHtml = '<p class="text-xs text-slate-500 mb-2">¿Cuántas aceptas ahora? (máx. ' + porConfirmar + ')</p>'
+    inputsHtml = '<p class="text-xs text-slate-500 mb-2">¿Cuántas aceptas y cuántas rechazas? (total pendiente: ' + porConfirmar + ')</p>'
       + '<div class="flex gap-2 items-center mb-2">'
-      + '<input type="number" id="confirm-cant-' + a.id + '" value="' + porConfirmar + '" min="1" max="' + porConfirmar + '"'
+      + '<div class="flex-1">'
+      + '<label class="text-[10px] text-slate-500 block mb-0.5">Aceptas</label>'
+      + '<input type="number" id="confirm-cant-' + a.id + '" value="' + porConfirmar + '" min="0" max="' + porConfirmar + '"'
       + ' onfocus="this.select()" oninput="validarCantidadConfirm(\'' + a.id + '\',' + porConfirmar + ')"'
-      + ' class="w-20 px-2 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-center font-bold text-lg focus:outline-none focus:border-gold-500" />'
-      + '<span id="confirm-warn-' + a.id + '" class="text-xs text-red-400 hidden">⚠️ Máximo ' + porConfirmar + '</span>'
-      + '</div>';
+      + ' class="w-full px-2 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-center font-bold text-lg focus:outline-none focus:border-gold-500" />'
+      + '</div>'
+      + '<div class="flex-1">'
+      + '<label class="text-[10px] text-slate-500 block mb-0.5">Rechazas</label>'
+      + '<input type="number" id="reject-cant-' + a.id + '" value="0" min="0" max="' + porConfirmar + '"'
+      + ' onfocus="this.select()"'
+      + ' class="w-full px-2 py-2.5 rounded-xl bg-zinc-800 border border-red-900/40 text-red-300 text-center font-bold text-lg focus:outline-none focus:border-red-500" />'
+      + '</div>'
+      + '</div>'
+      + '<span id="confirm-warn-' + a.id + '" class="text-xs text-red-400 hidden">⚠️ Máximo ' + porConfirmar + '</span>';
   }
 
   return '<div class="mt-3 p-3 bg-gold-500/5 border border-gold-500/20 rounded-xl">'
-    + '<p class="text-xs text-gold-400/90 font-semibold mb-2">📦 Por confirmar: <strong>' + porConfirmar + '</strong> terminadas' + fechaHtml + '</p>'
+    + '<p class="text-xs text-gold-400/90 font-semibold mb-2">📦 Por revisar: <strong>' + porConfirmar + '</strong> terminadas' + fechaHtml + '</p>'
     + inputsHtml
-    + '<textarea id="confirm-nota-' + a.id + '" rows="2" placeholder="Nota opcional (ej: calidad ok, revisar costuras...)"'
+    + '<textarea id="confirm-nota-' + a.id + '" rows="2" placeholder="Nota opcional para lo que aceptas (ej: calidad ok, revisar costuras...)"'
     + ' class="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-700/60 text-white text-xs focus:outline-none focus:border-gold-500 resize-none mb-2"></textarea>'
+    + '<input type="text" id="reject-motivo-' + a.id + '" placeholder="Motivo del rechazo (obligatorio si rechazas alguna unidad)"'
+    + ' class="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-red-900/40 text-red-200 text-xs focus:outline-none focus:border-red-500 mb-2 placeholder:text-red-400/40" />'
     + '<div class="flex gap-2">'
     + '<button onclick="confirmarEntrega(\'' + a.id + '\',' + hasTallasPendientes + ')"'
-    + ' class="flex-1 py-2.5 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-xl text-xs transition-colors">✅ Confirmar recibido</button>'
-    + '<button onclick="rechazarEntrega(\'' + a.id + '\',' + reportado + ')"'
-    + ' class="px-3 py-2.5 bg-zinc-800 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-xs transition-colors">✕ Rechazar todo</button>'
+    + ' class="flex-1 py-2.5 bg-gold-500 hover:bg-gold-600 text-black font-bold rounded-xl text-xs transition-colors">✅ Confirmar aceptadas</button>'
+    + '<button onclick="rechazarEntregaParcial(\'' + a.id + '\',' + hasTallasPendientes + ')"'
+    + ' class="px-3 py-2.5 bg-zinc-800 hover:bg-red-900/30 border border-red-900/40 text-red-400 font-bold rounded-xl text-xs transition-colors">✕ Rechazar</button>'
     + '</div>'
     + '</div>';
 }
@@ -906,8 +923,9 @@ function renderAsignacionesAdmin(asigs, container) {
         const reportado  = Number(a.cantidad_entregada) || 0;
         const confirmado = Number(a.cantidad_confirmada) || 0;
         const porConfirmar = Math.max(0, reportado - confirmado);
-        // Terminadas efectivas y pendientes para display admin
-        const terminadasEfectivas = Math.max(0, confirmado - devols);
+        // Nota: cantidad_confirmada ya queda neta de devoluciones (tanto el rechazo
+        // en revisión como la edición manual restan en el origen), por lo que NO se
+        // vuelve a restar "devols" aquí para evitar doble conteo. "Aceptadas" = confirmado.
         const asignadaTotal = Number(a.cantidad_asignada) || 0;
         const pendientes = Math.max(0, asignadaTotal - reportado);
         // % de lo asignado que ya fue aceptado/confirmado por el admin
@@ -1072,8 +1090,10 @@ function renderAsignacionesConf(asigs, container) {
     const noConf   = Number(a.cantidad_no_confeccionadas) || 0;
     const asignada = Number(a.cantidad_asignada) || 0;
     const entregada = Number(a.cantidad_entregada) || 0;
-    // Terminadas efectivas: lo que entregó menos lo que le devolvieron
-    const terminadasEfectivas = Math.max(0, entregada - devols);
+    // cantidad_entregada ya queda neta de devoluciones (se resta en el origen tanto
+    // al rechazar en revisión como al registrar una devolución manual), por lo que
+    // NO se vuelve a restar "devols" aquí para evitar doble conteo.
+    const terminadasEfectivas = entregada;
     // Pendientes correctas: asignado menos terminadas efectivas
     const pendientes = Math.max(0, asignada - terminadasEfectivas);
 
@@ -1105,7 +1125,7 @@ function renderAsignacionesConf(asigs, container) {
           <div class="rounded-2xl p-4 text-center" style="background:#1c2a1c; border:1px solid #2d4a2d">
             <div class="text-green-400 text-xs font-semibold mb-1">✅ TERMINADAS</div>
             <div class="text-white font-black" style="font-size:2.5rem;line-height:1">${terminadasEfectivas}</div>
-            ${devols > 0 ? `<div class="text-xs text-red-400/80 mt-1">(${entregada} − ${devols} devueltas)</div>` : ''}
+            ${devols > 0 ? `<div class="text-xs text-red-400/80 mt-1">(reportaste ${entregada + devols} · se devolvieron ${devols})</div>` : ''}
           </div>
           <div class="rounded-2xl p-4 text-center" style="background:#2a1c0a; border:1px solid #4a3010">
             <div class="text-yellow-500 text-xs font-semibold mb-1">⏳ PENDIENTES</div>
@@ -1429,7 +1449,15 @@ async function saveAdminAsigEdit(asigId) {
     return;
   }
 
-  // Leer devoluciones — por talla si hay grid, sino del campo simple/hidden
+  const asig = state.currentAsignaciones.find(x => x.id === asigId);
+  const tallasDevolAnteriores = asig?.tallas_devoluciones || {};
+  const devolsAnteriores      = Number(asig?.cantidad_devoluciones) || 0;
+  const tallasProgresoActual  = { ...(asig?.tallas_progreso    || {}) };
+  const tallasConfActual      = { ...(asig?.tallas_confirmadas || {}) };
+  let entregadaActual  = Number(asig?.cantidad_entregada)  || 0;
+  let confirmadoActual = Number(asig?.cantidad_confirmada) || 0;
+
+  // Leer devoluciones nuevas — por talla si hay grid, sino del campo simple/hidden
   const tallas_devoluciones = {};
   TODAS_TALLAS.forEach(t => {
     const el = document.getElementById(`edit-devol-${asigId}-${t}`);
@@ -1438,17 +1466,52 @@ async function saveAdminAsigEdit(asigId) {
       if (v > 0) tallas_devoluciones[t] = v;
     }
   });
-  const nuevasDevols = parseInt(document.getElementById(`edit-asig-devols-${asigId}`)?.value) || 0;
-  const cantidad_devoluciones = Object.keys(tallas_devoluciones).length > 0
-    ? Object.values(tallas_devoluciones).reduce((s, v) => s + v, 0)
-    : nuevasDevols;
+  const nuevasDevolsFlat = parseInt(document.getElementById(`edit-asig-devols-${asigId}`)?.value) || 0;
+  const usaTallasDevol = Object.keys(tallas_devoluciones).length > 0 || Object.keys(tallasDevolAnteriores).length > 0;
 
-  const { error } = await sb.from('asignaciones').update({
-    cantidad_asignada:     cantidadInput,
+  // IMPORTANTE: para que "confirmado" y "entregada" queden siempre netos de
+  // devoluciones (y así no restar dos veces en las pantallas de admin/confeccionista),
+  // cualquier cambio en devoluciones desde este formulario se aplica de inmediato
+  // como delta sobre entregada/confirmado (y sus versiones por talla), igual que
+  // hace el rechazo en revisión. Si el admin reduce una devolución (la "deshace"),
+  // las unidades se restituyen.
+  if (usaTallasDevol) {
+    TODAS_TALLAS.forEach(t => {
+      const anterior = tallasDevolAnteriores[t] || 0;
+      const nueva    = tallas_devoluciones[t]   || 0;
+      const delta    = nueva - anterior; // positivo = se devuelven más; negativo = se restituyen
+      if (delta === 0) return;
+      tallasProgresoActual[t] = Math.max(0, (tallasProgresoActual[t] || 0) - delta);
+      tallasConfActual[t]     = Math.max(0, (tallasConfActual[t]     || 0) - delta);
+    });
+    entregadaActual  = Object.values(tallasProgresoActual).reduce((s, v) => s + v, 0);
+    confirmadoActual = Object.values(tallasConfActual).reduce((s, v) => s + v, 0);
+  } else {
+    const delta = nuevasDevolsFlat - devolsAnteriores;
+    if (delta !== 0) {
+      entregadaActual  = Math.max(0, entregadaActual  - delta);
+      confirmadoActual = Math.max(0, confirmadoActual - delta);
+    }
+  }
+
+  const cantidad_devoluciones = usaTallasDevol
+    ? Object.values(tallas_devoluciones).reduce((s, v) => s + v, 0)
+    : nuevasDevolsFlat;
+
+  const updateData = {
+    cantidad_asignada:    cantidadInput,
     cantidad_devoluciones,
     tallas_devoluciones,
-    curva_tallas
-  }).eq('id', asigId);
+    curva_tallas,
+    cantidad_entregada:   entregadaActual,
+    cantidad_confirmada:  confirmadoActual
+  };
+  if (usaTallasDevol) {
+    updateData.tallas_progreso    = tallasProgresoActual;
+    updateData.tallas_confirmadas = tallasConfActual;
+  }
+
+  const { error } = await sb.from('asignaciones').update(updateData).eq('id', asigId);
 
   if (error) { showToast('Error al guardar', 'error'); console.error(error); return; }
   showToast('✅ Asignación actualizada');
@@ -1545,18 +1608,102 @@ async function confirmarEntrega(asigId, hasTallasPendientes = false) {
   }
 }
 
-// Rechazar toda la entrega con nota
-async function rechazarEntrega(asigId, reportado) {
-  const nota = prompt(`¿Por qué rechazas las ${reportado} unidades? (Escribe el motivo):`);
-  if (nota === null) return; // usuario canceló
-  if (!nota.trim()) { showToast('Escribe un motivo para el rechazo', 'error'); return; }
+// Rechazar una cantidad específica (total o por talla), con motivo obligatorio.
+// Resta de lo reportado (cantidad_entregada / tallas_progreso) y suma a devoluciones
+// (cantidad_devoluciones / tallas_devoluciones), para que el confeccionista vea el
+// motivo, las unidades vuelvan a "pendientes" y no se cuenten como terminadas.
+async function rechazarEntregaParcial(asigId, hasTallasPendientes = false) {
+  if (_accionesEnCurso.has(`rechazar-${asigId}`)) return;
+  _accionesEnCurso.add(`rechazar-${asigId}`);
+  try {
+    const motivo = document.getElementById(`reject-motivo-${asigId}`)?.value?.trim() || '';
+    const asig = state.currentAsignaciones.find(x => x.id === asigId);
+    if (!asig) return;
 
-  const { error } = await sb.from('asignaciones')
-    .update({ rechazo_nota: nota.trim() })
-    .eq('id', asigId);
-  if (error) { showToast('Error al guardar rechazo', 'error'); return; }
-  showToast('✕ Rechazo guardado — el confeccionista verá el motivo');
-  await loadPrendaDetail(state.currentPrenda.id, false);
+    const reportado = Number(asig.cantidad_entregada) || 0;
+
+    const tallas_progreso      = asig.tallas_progreso      || {};
+    const tallas_conf_previas  = asig.tallas_confirmadas   || {};
+    const tallas_devol_previas = asig.tallas_devoluciones  || {};
+
+    let cantidadRechazo = 0;
+    const updateData = {};
+
+    if (hasTallasPendientes) {
+      // Leer inputs de rechazo por talla y ajustar progreso/devoluciones por talla
+      const nuevas_tallas_progreso = { ...tallas_progreso };
+      const nuevas_tallas_devol    = { ...tallas_devol_previas };
+      TODAS_TALLAS.forEach(t => {
+        const rep_t  = tallas_progreso[t]     || 0;
+        const prev_t = tallas_conf_previas[t] || 0;
+        const pend_t = Math.max(0, rep_t - prev_t);
+        if (pend_t <= 0) return;
+        const inp = document.getElementById(`rtalla-${asigId}-${t}`);
+        if (!inp) return;
+        const val = Math.min(pend_t, Math.max(0, parseInt(inp.value) || 0));
+        if (val <= 0) return;
+        nuevas_tallas_progreso[t] = Math.max(0, rep_t - val);
+        nuevas_tallas_devol[t]    = (tallas_devol_previas[t] || 0) + val;
+        cantidadRechazo += val;
+      });
+      updateData.tallas_progreso     = nuevas_tallas_progreso;
+      updateData.tallas_devoluciones = nuevas_tallas_devol;
+      updateData.cantidad_entregada    = Object.values(nuevas_tallas_progreso).reduce((s, v) => s + v, 0);
+      updateData.cantidad_devoluciones = Object.values(nuevas_tallas_devol).reduce((s, v) => s + v, 0);
+    } else {
+      const confirmado   = Number(asig.cantidad_confirmada) || 0;
+      const porConfirmar = Math.max(0, reportado - confirmado);
+      const inp = document.getElementById(`reject-cant-${asigId}`);
+      cantidadRechazo = Math.min(porConfirmar, Math.max(0, parseInt(inp?.value) || 0));
+      if (cantidadRechazo > 0) {
+        const sumaProgreso = Object.values(tallas_progreso).reduce((s, v) => s + v, 0);
+        if (sumaProgreso > 0) {
+          // Descontar también de tallas_progreso (aunque esta asignación no tenga
+          // curva configurada) para que el próximo guardado del confeccionista —
+          // que siempre recalcula cantidad_entregada desde tallas_progreso — no
+          // restaure el valor rechazado.
+          let restante = cantidadRechazo;
+          const nuevas_tallas_progreso = { ...tallas_progreso };
+          TODAS_TALLAS.forEach(t => {
+            if (restante <= 0) return;
+            const disponible = nuevas_tallas_progreso[t] || 0;
+            if (disponible <= 0) return;
+            const quitar = Math.min(disponible, restante);
+            nuevas_tallas_progreso[t] = disponible - quitar;
+            restante -= quitar;
+          });
+          updateData.tallas_progreso    = nuevas_tallas_progreso;
+          updateData.cantidad_entregada = Object.values(nuevas_tallas_progreso).reduce((s, v) => s + v, 0);
+        } else {
+          updateData.cantidad_entregada = Math.max(0, reportado - cantidadRechazo);
+        }
+        updateData.cantidad_devoluciones = (Number(asig.cantidad_devoluciones) || 0) + cantidadRechazo;
+      }
+    }
+
+    if (cantidadRechazo < 1) { showToast('Ingresa al menos 1 unidad para rechazar', 'error'); return; }
+    if (!motivo) { showToast('Escribe el motivo del rechazo', 'error'); return; }
+
+    updateData.rechazo_nota = motivo;
+
+    const { data: actualizado, error } = await sb.from('asignaciones')
+      .update(updateData)
+      .eq('id', asigId)
+      .eq('cantidad_entregada', reportado) // optimistic locking
+      .select('id');
+
+    if (error) { showToast('Error al rechazar', 'error'); console.error(error); return; }
+    if (!actualizado || !actualizado.length) {
+      showToast('Otro administrador ya actualizó esta asignación. Recargando...', 'warn');
+      await loadPrendaDetail(state.currentPrenda.id, false);
+      return;
+    }
+
+    showToast(`✕ ${cantidadRechazo} unidad(es) rechazada(s) — el confeccionista verá el motivo`);
+    await loadPrendaDetail(state.currentPrenda.id, false);
+  } finally {
+    _accionesEnCurso.delete(`rechazar-${asigId}`);
+  }
 }
 
 // Aprobación / rechazo de "no pude confeccionar"
@@ -2097,7 +2244,8 @@ function exportarExcel() {
     const prenda = state.exportPrendas.find(p => p.id === a.prenda_id);
     const devols = Number(a.cantidad_devoluciones) || 0;
     const conf   = Number(a.cantidad_confirmada) || 0;
-    const neto   = Math.max(0, conf - devols);
+    // cantidad_confirmada ya queda neta de devoluciones — no restar de nuevo.
+    const neto   = conf;
     const curva       = a.curva_tallas       || {};
     const tallasConf  = a.tallas_confirmadas || {};
     const tallasProg  = a.tallas_progreso    || {};
@@ -2168,7 +2316,8 @@ function exportarExcel() {
     c['No confeccionadas']       += Number(a.cantidad_no_confeccionadas) || 0;
   });
   const hojaConf = Object.values(porConf).map(c => {
-    const neto   = Math.max(0, c['Aceptadas por admin'] - c['Devoluciones']);
+    // "Aceptadas por admin" ya queda neta de devoluciones — no restar de nuevo.
+    const neto   = c['Aceptadas por admin'];
     const avance = c['Total asignado'] > 0 ? Math.round((neto / c['Total asignado']) * 100) : 0;
     return { ...c, '# Prendas': c['# Prendas'].size, 'Entregado neto': neto, '% Avance': avance };
   });
