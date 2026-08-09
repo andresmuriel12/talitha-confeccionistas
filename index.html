@@ -27,7 +27,22 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-    body { background:#0d0d0d; color:#f1f5f9; font-family:'Inter',system-ui,sans-serif; overscroll-behavior:none; }
+    html, body { width:100%; height:100%; margin:0; }
+    body { background:#0d0d0d; color:#f1f5f9; font-family:'Inter',system-ui,sans-serif; overscroll-behavior:none; display:flex; flex-direction:column; overflow:hidden; }
+    /* Base independiente de Tailwind: la app conserva su distribución si el CDN tarda o falla. */
+    .hidden { display:none !important; }
+    #app-shell { flex-direction:column; width:100%; height:100vh; height:100dvh; min-width:0; overflow:hidden; }
+    #app-shell > header { display:flex; align-items:center; gap:.5rem; flex:none; min-width:0; padding:.5rem .75rem; background:#0d0d0d; border-bottom:1px solid #27272a; }
+    #header-logo { width:2rem; height:2rem; object-fit:contain; flex:none; }
+    #header-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:1rem; font-weight:700; }
+    #views-container { position:relative; flex:1 1 auto; min-height:0; overflow:hidden; }
+    #views-container > .view { position:absolute; inset:0; width:100%; }
+    #app-shell > nav { flex:none; width:100%; background:#0d0d0d; border-top:1px solid #27272a; }
+    #app-shell > nav > div { display:flex; width:100%; }
+    #prendas-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.5rem; padding:.75rem; }
+    #prendas-stats > div { padding:.75rem; border:1px solid #27272a; border-radius:.75rem; }
+    #prendas-list { padding:.75rem .75rem 7rem; }
+    #prendas-list > .card { margin-bottom:.75rem; padding:1rem; }
     ::-webkit-scrollbar { width:4px; height:4px; }
     ::-webkit-scrollbar-thumb { background:#3f3f46; border-radius:99px; }
 
@@ -148,7 +163,7 @@
   </header>
 
   <!-- VIEWS CONTAINER -->
-  <main class="flex-1 overflow-hidden relative">
+  <main id="views-container" class="flex-1 overflow-hidden relative">
 
     <!-- ========== VIEW: PRENDAS ========== -->
     <section id="view-prendas" class="view absolute inset-0 overflow-y-auto">
