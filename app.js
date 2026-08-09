@@ -589,7 +589,7 @@ function readAsigInsumoRows() {
 // ================================================================
 // 10d. TALLAS — helpers
 // ================================================================
-function renderTallasInput(prefix, curva) {
+function renderTallasInput(prefix, curva, onInput = '') {
   // curva: {S:30, M:40, ...} — solo muestra las que tienen valor o todas para input
   const grupos = [
     { label: '👧 Tallas niño', tallas: TALLAS_KIDS },
@@ -605,7 +605,7 @@ function renderTallasInput(prefix, curva) {
         <div class="text-center">
           <div class="text-xs text-slate-500 mb-0.5">${t}</div>
           <input type="number" id="${prefix}-${t}" value="${curva[t] || ''}" min="0"
-            placeholder="0"
+            step="1" placeholder="0" ${onInput ? `oninput="${onInput}"` : ''}
             onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
             class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" />
         </div>`).join('')}
@@ -620,6 +620,51 @@ function readTallasInput(prefix) {
     const val = parseInt(document.getElementById(`${prefix}-${t}`)?.value) || 0;
     if (val > 0) resultado[t] = val;
   });
+  return resultado;
+}
+
+function validarEntregaPorTallas(asigId) {
+  const asig = state.currentAsignaciones.find(x => x.id === asigId);
+  const asignada = Number(asig?.cantidad_asignada) || 0;
+  const curva = asig?.curva_tallas || {};
+  const tallas = {};
+  const errores = [];
+  let total = 0;
+
+  TODAS_TALLAS.forEach(t => {
+    const inp = document.getElementById(`tp-${asigId}-${t}`);
+    if (!inp) return;
+    const raw = inp.value.trim();
+    const cantidad = raw === '' ? 0 : Number(raw);
+    const maximo = Number(curva[t]) > 0 ? Number(curva[t]) : asignada;
+    const invalida = !Number.isInteger(cantidad) || cantidad < 0 || cantidad > maximo;
+    inp.classList.toggle('border-red-500', invalida);
+    inp.setCustomValidity(invalida ? `La talla ${t} no puede superar ${maximo} unidades.` : '');
+    if (invalida) {
+      errores.push(`La talla ${t} debe estar entre 0 y ${maximo}.`);
+      return;
+    }
+    if (cantidad > 0) tallas[t] = cantidad;
+    total += cantidad;
+  });
+
+  if (total > asignada) errores.push(`El total entregado (${total}) supera las ${asignada} unidades asignadas.`);
+  return { tallas, total, pendientes: Math.max(0, asignada - total), errores };
+}
+
+function syncEntregaResumen(asigId) {
+  const resultado = validarEntregaPorTallas(asigId);
+  const entregadas = document.getElementById(`conf-entregadas-${asigId}`);
+  const pendientes = document.getElementById(`conf-pendientes-${asigId}`);
+  const totalVivo = document.getElementById(`entrega-total-${asigId}`);
+  const pendientesVivo = document.getElementById(`entrega-pendientes-${asigId}`);
+  const aviso = document.getElementById(`entrega-warn-${asigId}`);
+  [entregadas, totalVivo].forEach(el => { if (el) el.textContent = resultado.total; });
+  [pendientes, pendientesVivo].forEach(el => { if (el) el.textContent = resultado.pendientes; });
+  if (aviso) {
+    aviso.textContent = resultado.errores[0] || '';
+    aviso.classList.toggle('hidden', resultado.errores.length === 0);
+  }
   return resultado;
 }
 
@@ -1124,12 +1169,12 @@ function renderAsignacionesConf(asigs, container) {
         <div class="grid grid-cols-2 gap-2 mb-2">
           <div class="rounded-2xl p-4 text-center" style="background:#1c2a1c; border:1px solid #2d4a2d">
             <div class="text-green-400 text-xs font-semibold mb-1">✅ TERMINADAS</div>
-            <div class="text-white font-black" style="font-size:2.5rem;line-height:1">${terminadasEfectivas}</div>
+            <div id="conf-entregadas-${a.id}" class="text-white font-black" style="font-size:2.5rem;line-height:1">${terminadasEfectivas}</div>
             ${devols > 0 ? `<div class="text-xs text-red-400/80 mt-1">(reportaste ${entregada + devols} · se devolvieron ${devols})</div>` : ''}
           </div>
           <div class="rounded-2xl p-4 text-center" style="background:#2a1c0a; border:1px solid #4a3010">
             <div class="text-yellow-500 text-xs font-semibold mb-1">⏳ PENDIENTES</div>
-            <div class="text-white font-black" style="font-size:2.5rem;line-height:1">${pendientes}</div>
+            <div id="conf-pendientes-${a.id}" class="text-white font-black" style="font-size:2.5rem;line-height:1">${pendientes}</div>
             <div class="text-xs text-slate-500 mt-1">de ${asignada} asignadas</div>
           </div>
         </div>
@@ -1200,17 +1245,21 @@ function renderAsignacionesConf(asigs, container) {
         <div>
           <p class="text-sm font-bold text-white mb-1">✅ ¿Cuántas terminaste por talla?</p>
           ${tieneTallas ? '' : `<p class="text-xs text-slate-500 mb-2">Llena solo las tallas que aplican a esta asignación.</p>`}
-          ${renderTallasInput(`tp-${a.id}`, progreso)}
+          ${renderTallasInput(`tp-${a.id}`, progreso, `syncEntregaResumen('${a.id}')`)}
         </div>
 
-        <!-- EN PROCESO TOTAL -->
-        <div>
-          <label class="text-sm font-semibold text-slate-300 mb-2 block">🔧 En proceso (total)</label>
-          <input type="number" id="inp-conf-${a.id}" value="${a.cantidad_confeccionada}"
-                 min="0"
-                 onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
-                 class="w-full px-3 py-3 rounded-2xl bg-zinc-800 border border-zinc-700 text-white text-xl font-bold text-center focus:outline-none focus:border-gold-500" />
+        <!-- TOTALES CALCULADOS AUTOMÁTICAMENTE DESDE LAS TALLAS -->
+        <div class="grid grid-cols-2 gap-2 rounded-2xl bg-zinc-800/70 border border-zinc-700 p-3 text-center">
+          <div>
+            <div class="text-xs text-green-400 font-semibold">ENTREGADAS</div>
+            <div id="entrega-total-${a.id}" class="text-2xl text-white font-black">${terminadasEfectivas}</div>
+          </div>
+          <div>
+            <div class="text-xs text-yellow-500 font-semibold">PENDIENTES</div>
+            <div id="entrega-pendientes-${a.id}" class="text-2xl text-white font-black">${pendientes}</div>
+          </div>
         </div>
+        <p id="entrega-warn-${a.id}" class="hidden text-xs text-red-400 -mt-2"></p>
 
         <!-- NO PUDE CONFECCIONAR — por talla si hay curva, sino total -->
         <div>
@@ -1377,7 +1426,6 @@ async function saveNewAsignacion() {
 }
 
 async function saveAsignacionProgress(asigId) {
-  const confeccionada = parseInt(document.getElementById(`inp-conf-${asigId}`)?.value) || 0;
   const notaConf      = document.getElementById(`inp-nota-${asigId}`)?.value || '';
   const fechaRaw      = document.getElementById(`inp-fecha-${asigId}`)?.value || '';
   const fechaEntrega  = fechaRaw ? new Date(fechaRaw).toISOString() : null;
@@ -1399,12 +1447,17 @@ async function saveAsignacionProgress(asigId) {
     noConf = parseInt(document.getElementById(`inp-noconf-${asigId}`)?.value) || 0;
   }
 
-  // Siempre leer tallas progreso (el confeccionista siempre ve la grilla de tallas)
-  const tallas_progreso = readTallasInput(`tp-${asigId}`);
-  const entregada = Object.values(tallas_progreso).reduce((s, v) => s + v, 0);
+  // El total entregado y "en proceso" se derivan de las cantidades por talla.
+  const entrega = syncEntregaResumen(asigId);
+  if (entrega.errores.length) {
+    showToast(entrega.errores[0], 'error');
+    return;
+  }
+  const tallas_progreso = entrega.tallas;
+  const entregada = entrega.total;
 
   const updateData = {
-    cantidad_confeccionada:     confeccionada,
+    cantidad_confeccionada:     entregada,
     cantidad_entregada:         entregada,
     cantidad_no_confeccionadas: noConf,
     tallas_no_confeccionadas,
