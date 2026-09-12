@@ -60,10 +60,38 @@
     .filter-tab.active { background:rgba(201,168,76,.15); color:#c9a84c; border-color:rgba(201,168,76,.4); }
 
     /* Nav */
-    .nav-item { display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; font-weight:500; color:#52525b; flex:1; padding:6px 0; transition:color .15s; }
+    .nav-item { display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; font-weight:500; color:#52525b; flex:1; padding:6px 0; transition:color .15s, background .15s; }
     .nav-item.active { color:#c9a84c; }
     .nav-item svg { transition:stroke .15s; }
     .nav-item.active svg { stroke:#c9a84c; }
+
+    /* Tablet / Desktop — la barra inferior se convierte en sidebar fijo a la izquierda */
+    @media (min-width: 768px) {
+      #app-shell { flex-direction: row; }
+      #app-shell > nav#nav-admin, #app-shell > nav#nav-conf {
+        width: 15rem; height: 100%; flex-shrink: 0;
+        border-top: none; border-right: 1px solid #27272a;
+        padding-bottom: 0 !important;
+      }
+      #nav-admin > div, #nav-conf > div { flex-direction: column; height: 100%; padding: 1.25rem .75rem; gap: .25rem; }
+      .nav-item { flex-direction: row; justify-content: flex-start; align-items: center; gap: .75rem; font-size: 13px; padding: .7rem .9rem; border-radius: .75rem; flex: none; }
+      .nav-item:hover { background: #18181b; }
+      .nav-item.active { background: rgba(201,168,76,.1); }
+      #main-col { min-width: 0; }
+      #prendas-stats, #view-prendas > .flex, #prendas-list,
+      #view-prenda-detail > div, #view-users > div, #view-users #users-list, #view-export > div {
+        max-width: 48rem; margin-left: auto; margin-right: auto; width: 100%;
+      }
+      #prendas-list { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: .75rem; align-content: start; }
+      #prendas-list > * { margin: 0 !important; }
+    }
+    @media (min-width: 1100px) {
+      #prendas-stats, #view-prendas > .flex, #prendas-list,
+      #view-prenda-detail > div, #view-users > div, #view-users #users-list, #view-export > div {
+        max-width: 64rem;
+      }
+      #prendas-list { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    }
 
     /* Misc */
     .fade-in { animation:fadeIn .2s ease; }
@@ -140,7 +168,10 @@
 </div>
 
 <!-- ================================================================ APP SHELL ================================================================ -->
-<div id="app-shell" class="flex flex-col h-full" style="display:none">
+<div id="app-shell" class="flex flex-col md:flex-row h-full" style="display:none">
+
+ <!-- MAIN COLUMN (header + contenido) — a la derecha del sidebar en tablet/desktop -->
+ <div id="main-col" class="flex flex-col flex-1 min-w-0 h-full overflow-hidden order-1 md:order-2">
 
   <!-- HEADER -->
   <header class="flex items-center gap-2 px-3 py-2 border-b border-zinc-800 bg-talitha-dark shrink-0" style="padding-top: max(8px, env(safe-area-inset-top))">
@@ -257,8 +288,10 @@
 
   </main>
 
-  <!-- NAV: ADMIN -->
-  <nav id="nav-admin" class="hidden border-t border-zinc-800 bg-talitha-dark shrink-0"
+ </div><!-- /main-col -->
+
+  <!-- NAV: ADMIN (barra inferior en móvil, sidebar fijo en tablet/desktop) -->
+  <nav id="nav-admin" class="hidden border-t border-zinc-800 bg-talitha-dark shrink-0 order-2 md:order-1"
        style="padding-bottom: max(12px, env(safe-area-inset-bottom))">
     <div class="flex">
       <button class="nav-item active" id="nav-btn-prendas" onclick="switchNav('view-prendas','nav-btn-prendas')">
@@ -276,8 +309,8 @@
     </div>
   </nav>
 
-  <!-- NAV: CONFECCIONISTA -->
-  <nav id="nav-conf" class="hidden border-t border-zinc-800 bg-talitha-dark shrink-0"
+  <!-- NAV: CONFECCIONISTA (barra inferior en móvil, sidebar fijo en tablet/desktop) -->
+  <nav id="nav-conf" class="hidden border-t border-zinc-800 bg-talitha-dark shrink-0 order-2 md:order-1"
        style="padding-bottom: max(12px, env(safe-area-inset-bottom))">
     <div class="flex">
       <button class="nav-item active">
