@@ -31,8 +31,9 @@
     body { background:#0d0d0d; color:#f1f5f9; font-family:'Inter',system-ui,sans-serif; overscroll-behavior:none; display:flex; flex-direction:column; overflow:hidden; }
     /* Base independiente de Tailwind: la app conserva su distribución si el CDN tarda o falla. */
     .hidden { display:none !important; }
-    #app-shell { flex-direction:column; width:100%; height:100vh; height:100dvh; min-width:0; overflow:hidden; }
-    #app-shell > header { display:flex; align-items:center; gap:.5rem; flex:none; min-width:0; padding:.5rem .75rem; background:#0d0d0d; border-bottom:1px solid #27272a; }
+    #app-shell { display:flex; flex-direction:column; width:100%; height:100vh; height:100dvh; min-width:0; overflow:hidden; }
+    #main-col { display:flex; flex-direction:column; flex:1 1 auto; min-width:0; min-height:0; height:100%; overflow:hidden; }
+    #main-col > header { display:flex; align-items:center; gap:.5rem; flex:none; min-width:0; padding:.5rem .75rem; background:#0d0d0d; border-bottom:1px solid #27272a; }
     #header-logo { width:2rem; height:2rem; object-fit:contain; flex:none; }
     #header-title { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:1rem; font-weight:700; }
     #views-container { position:relative; flex:1 1 auto; min-height:0; overflow:hidden; }
@@ -69,15 +70,15 @@
     @media (min-width: 768px) {
       #app-shell { flex-direction: row; }
       #app-shell > nav#nav-admin, #app-shell > nav#nav-conf {
-        width: 15rem; height: 100%; flex-shrink: 0;
+        order: 1; width: 15rem; height: 100%; flex-shrink: 0;
         border-top: none; border-right: 1px solid #27272a;
         padding-bottom: 0 !important;
       }
-      #nav-admin > div, #nav-conf > div { flex-direction: column; height: 100%; padding: 1.25rem .75rem; gap: .25rem; }
+      #nav-admin > div, #nav-conf > div { display:flex; flex-direction: column; height: 100%; padding: 1.25rem .75rem; gap: .25rem; }
       .nav-item { flex-direction: row; justify-content: flex-start; align-items: center; gap: .75rem; font-size: 13px; padding: .7rem .9rem; border-radius: .75rem; flex: none; }
       .nav-item:hover { background: #18181b; }
       .nav-item.active { background: rgba(201,168,76,.1); }
-      #main-col { min-width: 0; }
+      #main-col { order: 2; min-width: 0; }
       #prendas-stats, #view-prendas > .flex, #prendas-list,
       #view-prenda-detail > div, #view-users > div, #view-users #users-list, #view-export > div {
         max-width: 48rem; margin-left: auto; margin-right: auto; width: 100%;
@@ -164,6 +165,9 @@
       <p id="login-error" class="text-red-400 text-xs hidden"></p>
       <button onclick="handleLogin()" id="btn-login" class="btn-gold">Ingresar</button>
     </div>
+    <button onclick="forceUpdateApp()" style="display:block;width:100%;text-align:center;margin-top:16px;background:none;border:none;color:#71717a;font-size:12px;cursor:pointer">
+      ⟳ Si la app se ve rara o desactualizada, toca aquí para actualizar
+    </button>
   </div>
 </div>
 
@@ -186,6 +190,10 @@
       class="w-9 h-9 rounded-xl bg-gold-500 flex items-center justify-center text-black font-bold text-xl hidden shrink-0">+</button>
     <button id="btn-refresh" onclick="refreshDetail()" title="Actualizar"
       class="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center text-slate-400 hover:text-white hidden shrink-0">
+      <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+    </button>
+    <button id="btn-force-update" onclick="forceUpdateApp()" title="Actualizar aplicación a la última versión"
+      class="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center text-slate-400 hover:text-gold-400 shrink-0">
       <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
     </button>
     <button onclick="handleLogout()" class="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center text-slate-400 shrink-0">

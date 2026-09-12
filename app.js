@@ -140,6 +140,27 @@ async function init() {
   });
 }
 
+// Fuerza la actualización de la app a la última versión publicada:
+// desregistra el service worker, borra toda la caché y recarga sin
+// usar copias guardadas. Disponible para todos los perfiles
+// (administrador, confeccionista, etc.) desde el botón del encabezado
+// y desde el enlace de la pantalla de login.
+async function forceUpdateApp() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister().catch(() => {})));
+    }
+  } catch (e) {}
+  try {
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k).catch(() => {})));
+    }
+  } catch (e) {}
+  location.href = location.pathname + '?v=' + Date.now();
+}
+
 function resetState() {
   Object.assign(state, {
     user:null, profile:null, prendas:[], confeccionistas:[],
