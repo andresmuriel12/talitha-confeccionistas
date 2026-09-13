@@ -29,8 +29,48 @@
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
     html, body { width:100%; height:100%; margin:0; }
     body { background:#0d0d0d; color:#f1f5f9; font-family:'Inter',system-ui,sans-serif; overscroll-behavior:none; display:flex; flex-direction:column; overflow:hidden; }
-    /* Base independiente de Tailwind: la app conserva su distribución si el CDN tarda o falla. */
+    /* Base independiente de Tailwind: la app conserva su distribución y una
+       apariencia coherente aunque el CDN de Tailwind tarde, falle o no llegue
+       a tiempo para el contenido que se agrega dinámicamente tras iniciar
+       sesión (botones, inputs, etc.). Si Tailwind sí carga, sus clases de
+       utilidad (más específicas) siguen ganando y se ve el diseño final. */
     .hidden { display:none !important; }
+    button {
+      font-family:inherit; font-size:inherit; color:inherit;
+      background:transparent; border:none; margin:0; padding:0;
+      cursor:pointer; text-align:inherit; -webkit-appearance:none; appearance:none;
+    }
+    input:not([type=checkbox]):not([type=radio]), textarea, select {
+      font-family:inherit; font-size:14px; color:#f1f5f9;
+      background:#0d0d0d; border:1px solid #3f3f46; border-radius:.75rem;
+      padding:.65rem .9rem; -webkit-appearance:none; appearance:none;
+    }
+    input:focus, textarea:focus, select:focus { outline:none; border-color:#c9a84c; }
+    select {
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+      background-repeat:no-repeat; background-position:right .75rem center; padding-right:2.25rem;
+    }
+    input[type=checkbox], input[type=radio] { width:auto; height:auto; padding:0; accent-color:#c9a84c; }
+    /* Colores de marca (gold / talitha): definidos también en CSS plano,
+       por si Tailwind no alcanza a generarlos para contenido agregado
+       dinámicamente tras iniciar sesión. Si Tailwind sí carga, sus propias
+       clases (misma especificidad, mismo valor) no generan conflicto. */
+    .bg-gold-500 { background-color:#c9a84c; }
+    .bg-gold-600 { background-color:#a8882d; }
+    .text-gold-300 { color:#e8d48b; }
+    .text-gold-400 { color:#ddc060; }
+    .border-gold-500 { border-color:#c9a84c; }
+    .bg-talitha-dark { background-color:#0d0d0d; }
+    .bg-talitha-surface { background-color:#1a1a1a; }
+    .bg-talitha-card { background-color:#252525; }
+    .hover\:bg-gold-600:hover { background-color:#a8882d; }
+    .active\:bg-gold-600:active { background-color:#a8882d; }
+    .hover\:border-gold-500:hover { border-color:#c9a84c; }
+    .hover\:text-gold-400:hover { color:#ddc060; }
+    .bg-gold-500\/5 { background-color:rgba(201,168,76,.05); }
+    .bg-gold-500\/10 { background-color:rgba(201,168,76,.10); }
+    .bg-gold-500\/20 { background-color:rgba(201,168,76,.20); }
+    .text-gold-400\/90 { color:rgba(221,192,96,.9); }
     /* Estructura de #app-shell resuelta 100% con CSS Grid puro (sin depender
        de que Tailwind cargue): móvil = filas apiladas, desktop = sidebar fijo. */
     #app-shell {
