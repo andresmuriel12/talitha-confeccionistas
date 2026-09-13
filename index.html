@@ -8,22 +8,23 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Talitha Confeccionistas</title>
   <link rel="manifest" href="manifest.json" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- cdn.tailwindcss.com no resuelve en algunas redes (bloqueo de DNS/ISP);
+       se usa en su lugar el mismo motor de Tailwind servido desde jsdelivr,
+       que sí es accesible. Ver estilo @theme más abajo para los colores propios. -->
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            gold: { 300:'#e8d48b', 400:'#ddc060', 500:'#c9a84c', 600:'#a8882d' },
-            talitha: { dark:'#0d0d0d', surface:'#1a1a1a', card:'#252525' }
-          }
-        }
-      }
+  <style type="text/tailwindcss">
+    @theme {
+      --color-gold-300: #e8d48b;
+      --color-gold-400: #ddc060;
+      --color-gold-500: #c9a84c;
+      --color-gold-600: #a8882d;
+      --color-talitha-dark: #0d0d0d;
+      --color-talitha-surface: #1a1a1a;
+      --color-talitha-card: #252525;
     }
-  </script>
+  </style>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
