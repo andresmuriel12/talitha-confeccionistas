@@ -2108,7 +2108,12 @@ function selectRole(role) {
 function showSection(id) {
   ['view-loading','view-login','app-shell'].forEach(s => {
     const el = document.getElementById(s);
-    if (el) el.style.display = (s === id) ? 'flex' : 'none';
+    if (!el) return;
+    if (s !== id) { el.style.display = 'none'; return; }
+    // #app-shell usa CSS Grid definido en la hoja de estilos (no depende de
+    // Tailwind). Quitamos el display inline para que esa regla se aplique;
+    // los otros paneles sí necesitan "flex" inline como antes.
+    el.style.display = (s === 'app-shell') ? '' : 'flex';
   });
 }
 
