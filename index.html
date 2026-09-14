@@ -396,10 +396,76 @@
         <input id="new-prenda-total" type="number" placeholder="0" min="1"
           class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500 text-center text-lg font-bold" />
       </div>
+      <div class="pt-2 border-t border-zinc-800">
+        <label class="text-xs text-slate-400 mb-1 block">Foto de muestra <span class="text-slate-600 font-normal">(opcional, la verá la confeccionista asignada)</span></label>
+        <div id="new-prenda-foto-preview-wrap" class="hidden mb-2">
+          <img id="new-prenda-foto-preview" class="w-full h-40 object-cover rounded-xl border border-zinc-700" />
+          <button type="button" onclick="clearNewPrendaFoto()" class="mt-1 text-xs text-red-400 hover:text-red-300">✕ Quitar foto</button>
+        </div>
+        <div id="new-prenda-foto-buttons" class="grid grid-cols-2 gap-2">
+          <label class="flex items-center justify-center gap-1.5 py-2.5 border border-zinc-700 hover:border-gold-500 rounded-xl text-xs text-slate-400 hover:text-gold-400 cursor-pointer">
+            📷 Tomar foto
+            <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleNewPrendaFotoSelect(this)" />
+          </label>
+          <label class="flex items-center justify-center gap-1.5 py-2.5 border border-zinc-700 hover:border-gold-500 rounded-xl text-xs text-slate-400 hover:text-gold-400 cursor-pointer">
+            🖼️ De galería
+            <input type="file" accept="image/*" class="hidden" onchange="handleNewPrendaFotoSelect(this)" />
+          </label>
+        </div>
+      </div>
     </div>
     <div class="flex gap-3 mt-6">
       <button onclick="closeModal('modal-new-prenda')" class="flex-1 py-3 rounded-xl border border-zinc-700 text-slate-400 text-sm font-medium">Cancelar</button>
       <button onclick="saveNewPrenda()" class="flex-1 btn-gold">Guardar Prenda</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: EDITAR PRENDA -->
+<div id="modal-edit-prenda" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-edit-prenda')">
+  <div class="modal-sheet">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-lg font-bold text-white">Editar Prenda</h2>
+      <button onclick="closeModal('modal-edit-prenda')" class="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+    </div>
+    <input type="hidden" id="edit-prenda-id" />
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs text-slate-400 mb-1 block">Nombre de la prenda *</label>
+        <input id="edit-prenda-nombre" type="text" placeholder="Ej: Camisa polo azul"
+          class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 mb-1 block">Descripción</label>
+        <textarea id="edit-prenda-descripcion" rows="3" placeholder="Tela, características, referencia..."
+          class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500 resize-none"></textarea>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 mb-1 block">Total de unidades *</label>
+        <input id="edit-prenda-total" type="number" placeholder="0" min="1"
+          class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500 text-center text-lg font-bold" />
+      </div>
+      <div class="pt-2 border-t border-zinc-800">
+        <label class="text-xs text-slate-400 mb-1 block">Foto de muestra <span class="text-slate-600 font-normal">(opcional)</span></label>
+        <div id="edit-prenda-foto-preview-wrap" class="hidden mb-2">
+          <img id="edit-prenda-foto-preview" class="w-full h-40 object-cover rounded-xl border border-zinc-700" />
+          <button type="button" onclick="clearEditPrendaFoto()" class="mt-1 text-xs text-red-400 hover:text-red-300">✕ Quitar foto</button>
+        </div>
+        <div id="edit-prenda-foto-buttons" class="grid grid-cols-2 gap-2">
+          <label class="flex items-center justify-center gap-1.5 py-2.5 border border-zinc-700 hover:border-gold-500 rounded-xl text-xs text-slate-400 hover:text-gold-400 cursor-pointer">
+            📷 Tomar foto
+            <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleEditPrendaFotoSelect(this)" />
+          </label>
+          <label class="flex items-center justify-center gap-1.5 py-2.5 border border-zinc-700 hover:border-gold-500 rounded-xl text-xs text-slate-400 hover:text-gold-400 cursor-pointer">
+            🖼️ De galería
+            <input type="file" accept="image/*" class="hidden" onchange="handleEditPrendaFotoSelect(this)" />
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="flex gap-3 mt-6">
+      <button onclick="closeModal('modal-edit-prenda')" class="flex-1 py-3 rounded-xl border border-zinc-700 text-slate-400 text-sm font-medium">Cancelar</button>
+      <button onclick="saveEditPrenda()" class="flex-1 btn-gold">Guardar Cambios</button>
     </div>
   </div>
 </div>
@@ -512,6 +578,13 @@
           class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500 text-center text-lg font-bold" />
       </div>
 
+      <!-- PRECIO POR UNIDAD — individual para esta confeccionista, opcional -->
+      <div class="pt-2 border-t border-zinc-800">
+        <label class="text-xs text-slate-400 mb-1 block">Precio por unidad para esta confeccionista <span class="text-slate-600 font-normal">(opcional, en pesos)</span></label>
+        <input id="asig-precio" type="number" placeholder="0" min="0" step="1"
+          class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500 text-center text-lg font-bold" />
+      </div>
+
       <!-- INSUMOS PARA ESTA CONFECCIONISTA — independientes por asignación -->
       <div class="pt-2 border-t border-zinc-800">
         <p class="text-xs text-gold-400 font-semibold mb-1">🧵 Insumos para esta confeccionista <span class="text-slate-600 font-normal">(opcional)</span></p>
@@ -570,6 +643,34 @@
     <div class="flex gap-3 mt-6">
       <button onclick="closeModal('modal-new-user')" class="flex-1 py-3 rounded-xl border border-zinc-700 text-slate-400 text-sm font-medium">Cancelar</button>
       <button onclick="saveNewUser()" id="btn-save-user" class="flex-1 btn-gold">Crear Usuario</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================ MODAL: EDITAR USUARIO ================================================================ -->
+<div id="modal-edit-user" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-edit-user')">
+  <div class="modal-sheet">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-lg font-bold text-white">Editar Usuario</h2>
+      <button onclick="closeModal('modal-edit-user')" class="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+    </div>
+    <input type="hidden" id="edit-user-id" />
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs text-slate-400 mb-1 block">Nombre completo *</label>
+        <input id="edit-user-name" type="text" placeholder="Nombre completo"
+          class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500" />
+      </div>
+      <div>
+        <label class="text-xs text-slate-400 mb-1 block">Nueva contraseña <span class="text-slate-600 font-normal">(dejar en blanco para no cambiarla)</span></label>
+        <input id="edit-user-password" type="text" placeholder="Mínimo 6 caracteres"
+          class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500" />
+      </div>
+    </div>
+    <div id="edit-user-error" class="text-red-400 text-xs mt-3 hidden"></div>
+    <div class="flex gap-3 mt-6">
+      <button onclick="closeModal('modal-edit-user')" class="flex-1 py-3 rounded-xl border border-zinc-700 text-slate-400 text-sm font-medium">Cancelar</button>
+      <button onclick="saveEditUser()" id="btn-save-edit-user" class="flex-1 btn-gold">Guardar Cambios</button>
     </div>
   </div>
 </div>

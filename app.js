@@ -416,10 +416,18 @@ function renderPrendaDetail() {
       </div>
       ${prenda.descripcion ? `<p class="text-slate-400 text-sm mb-2">${escHtml(prenda.descripcion)}</p>` : ''}
       ${isAdmin ? `<p class="text-sm text-slate-500">📦 <strong class="text-white">${Number(prenda.total_unidades).toLocaleString()}</strong> unidades totales en el pedido</p>` : ''}
+      ${prenda.foto_muestra_url ? `
+      <div class="mt-3">
+        <p class="text-xs text-slate-500 mb-1">📸 Muestra</p>
+        <img src="${escHtml(prenda.foto_muestra_url)}" onclick="openPhoto('${escHtml(prenda.foto_muestra_url)}')"
+             class="w-full h-40 object-cover rounded-xl border border-zinc-700 cursor-pointer" />
+      </div>` : ''}
       ${isAdmin ? `
       <div class="mt-3 pt-3 border-t border-zinc-800 flex items-center gap-2 flex-wrap">
         ${nextStatus ? `<button onclick="updatePrendaStatus('${prenda.id}','${nextStatus}')"
           class="text-xs px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700">${nextLabel}</button>` : ''}
+        <button onclick="openEditPrendaModal('${prenda.id}')"
+          class="text-xs text-gold-400 hover:text-gold-300">✏️ Editar prenda</button>
         <button onclick="confirmDeletePrenda('${prenda.id}')"
           class="text-xs text-red-400 hover:text-red-300 ml-auto">🗑 Eliminar prenda</button>
       </div>` : ''}
@@ -756,65 +764,6 @@ function renderTallasResumen(curva, progreso, isAdmin, confirmadas = {}) {
 }
 
 // ================================================================
-// 10c. HELPER — "no pude confeccionar" por talla (confeccionista)
-// ================================================================
-function renderNoConfInput(asigId, curva, totalNoConf, tallasNoConf) {
-  const tallasConCurva = TODAS_TALLAS.filter(t => (curva[t] || 0) > 0);
-
-  if (!tallasConCurva.length) {
-    // Sin curva: input único como antes
-    return '<input type="number" id="inp-noconf-' + asigId + '" value="' + totalNoConf + '" min="0"'
-      + ' onfocus="if(this.value===\'0\'||this.value===\'\')this.value=\'\';this.select()"'
-      + ' class="w-full px-3 py-3 rounded-2xl bg-zinc-800 border border-zinc-700 text-white text-xl font-bold text-center focus:outline-none focus:border-red-500" />';
-  }
-
-  // Con curva: grid por talla
-  const grupos = [
-    { label: '👧 Niño',   tallas: TALLAS_KIDS.filter(t => tallasConCurva.includes(t)) },
-    { label: '👔 Adulto', tallas: TALLAS_ADULT.filter(t => tallasConCurva.includes(t)) }
-  ].filter(g => g.tallas.length > 0);
-
-  let rows = '';
-  grupos.forEach(g => {
-    rows += '<p class="text-xs text-slate-500 mb-1">' + g.label + '</p>';
-    rows += '<div class="grid grid-cols-5 gap-1 mb-2">';
-    g.tallas.forEach(t => {
-      const maxT = curva[t] || 0;
-      const valT = tallasNoConf[t] || 0;
-      rows += '<div class="text-center">'
-        + '<div class="text-xs text-slate-400 mb-0.5">' + t + '</div>'
-        + '<div class="text-xs text-slate-600 mb-0.5">de ' + maxT + '</div>'
-        + '<input type="number" id="inp-noconf-' + asigId + '-' + t + '" value="' + valT + '" min="0" max="' + maxT + '"'
-        + ' onfocus="this.select()" oninput="syncNoConfTotal(\'' + asigId + '\')"'
-        + ' class="w-full px-0.5 py-1.5 rounded-lg bg-zinc-800 border border-red-900/40 text-red-300 text-sm font-bold text-center focus:outline-none focus:border-red-500" />'
-        + '</div>';
-    });
-    rows += '</div>';
-  });
-
-  return rows
-    + '<input type="hidden" id="inp-noconf-' + asigId + '" value="' + totalNoConf + '" />'
-    + '<p id="noconf-total-' + asigId + '" class="text-xs text-red-400 mt-1 text-center'
-    + (totalNoConf > 0 ? '' : ' hidden') + '">Total: ' + totalNoConf + ' piezas que no puedes confeccionar</p>';
-}
-
-function syncNoConfTotal(asigId) {
-  const curva = state.currentAsignaciones?.find(a => a.id === asigId)?.curva_tallas || {};
-  const tallasConCurva = TODAS_TALLAS.filter(t => (curva[t] || 0) > 0);
-  const total = tallasConCurva.reduce((sum, t) => {
-    return sum + (parseInt(document.getElementById('inp-noconf-' + asigId + '-' + t)?.value) || 0);
-  }, 0);
-  const hiddenEl = document.getElementById('inp-noconf-' + asigId);
-  if (hiddenEl) hiddenEl.value = total;
-  const labelEl = document.getElementById('noconf-total-' + asigId);
-  if (labelEl) {
-    labelEl.textContent = 'Total: ' + total + ' piezas que no puedes confeccionar';
-    if (total > 0) labelEl.classList.remove('hidden');
-    else labelEl.classList.add('hidden');
-  }
-}
-
-// ================================================================
 // 10d. HELPER — devoluciones por talla en modo edición admin
 // ================================================================
 function renderDevolucionesEdit(asigId, curva, confirmadas, devolucionesPrevias, totalDevols) {
@@ -985,7 +934,6 @@ function renderAsignacionesAdmin(asigs, container) {
           (progreso[t] || 0) > (tallas_conf_actual[t] || 0));
         const hasTallasPendientes = tallasConPendiente.length > 0;
         const devols   = Number(a.cantidad_devoluciones) || 0;
-        const noConf   = Number(a.cantidad_no_confeccionadas) || 0;
         const reportado  = Number(a.cantidad_entregada) || 0;
         const confirmado = Number(a.cantidad_confirmada) || 0;
         const porConfirmar = Math.max(0, reportado - confirmado);
@@ -993,9 +941,14 @@ function renderAsignacionesAdmin(asigs, container) {
         // en revisión como la edición manual restan en el origen), por lo que NO se
         // vuelve a restar "devols" aquí para evitar doble conteo. "Aceptadas" = confirmado.
         const asignadaTotal = Number(a.cantidad_asignada) || 0;
-        const pendientes = Math.max(0, asignadaTotal - reportado);
+        // "Asignadas" ahora es el restante real: solo baja cuando el admin ACEPTA
+        // (confirmado), no con lo que el confeccionista simplemente reporta.
+        const restante = Math.max(0, asignadaTotal - confirmado);
         // % de lo asignado que ya fue aceptado/confirmado por el admin
         const pctAceptadas = asignadaTotal > 0 ? Math.min(100, Math.round(confirmado / asignadaTotal * 100)) : 0;
+        const pctDevueltas = asignadaTotal > 0 ? Math.min(100, Math.round(devols / asignadaTotal * 100)) : 0;
+        const precioAsig     = Number(a.precio_unitario) || 0;
+        const valorGenerado  = confirmado * precioAsig;
 
         return `
         <div class="border-b border-zinc-900/80 last:border-0">
@@ -1018,79 +971,25 @@ function renderAsignacionesAdmin(asigs, container) {
             ${renderTallasResumen(curva, progreso, true, tallas_conf_actual) ||
               '<p class="text-xs text-slate-600/70 mt-1.5 mb-1 px-0.5">📐 Sin curva de tallas · Toca ✏️ para configurar</p>'}
 
-            <!-- CONTEO VISUAL -->
-            <div class="grid grid-cols-4 gap-1.5 mt-2 text-xs text-center">
+            <!-- CONTEO VISUAL (simplificado) -->
+            <div class="grid grid-cols-3 gap-1.5 mt-2 text-xs text-center">
               <div class="bg-zinc-800 rounded-lg p-2">
                 <div class="text-white mb-0.5">Asignadas</div>
-                <div class="text-white font-bold text-base">${a.cantidad_asignada}</div>
+                <div class="text-white font-bold text-base">${restante}</div>
               </div>
-              <div class="bg-zinc-800 rounded-lg p-2">
-                <div class="text-blue-400 mb-0.5">En proceso</div>
-                <div class="text-white font-bold text-base">${a.cantidad_confeccionada}</div>
-              </div>
-              <div class="bg-zinc-800 rounded-lg p-2">
-                <div class="text-yellow-500 mb-0.5">Pendientes</div>
-                <div class="text-white font-bold text-base">${pendientes}</div>
-              </div>
-              <div class="bg-zinc-800 rounded-lg p-2">
-                <div class="text-gold-400 mb-0.5">Reportadas</div>
-                <div class="text-white font-bold text-base">${reportado}</div>
-              </div>
-            </div>
-            <div class="grid grid-cols-3 gap-1.5 mt-1.5 text-xs text-center">
               <div class="bg-zinc-800 rounded-lg p-2">
                 <div class="text-green-400 mb-0.5">✅ Aceptadas</div>
-                <div class="text-white font-bold text-base">${confirmado} <span class="text-xs font-semibold">(${pctAceptadas}%)</span></div>
+                <div class="text-white font-bold text-base">${pctAceptadas}%</div>
               </div>
               <div class="bg-zinc-800 rounded-lg p-2">
                 <div class="text-red-400 mb-0.5">🔄 Devueltas</div>
-                <div class="text-white font-bold text-base">${devols}</div>
-              </div>
-              <div class="bg-zinc-800 rounded-lg p-2">
-                <div class="text-slate-500 mb-0.5">❌ No conf.</div>
-                <div class="text-white font-bold text-base">${noConf}</div>
+                <div class="text-white font-bold text-base">${pctDevueltas}%</div>
               </div>
             </div>
+            ${precioAsig > 0 ? `<p class="text-xs text-slate-500 mt-1.5 px-0.5">💲 Precio unitario: <strong class="text-white">$${precioAsig.toLocaleString('es-CO')}</strong> · Valor generado: <strong class="text-gold-400">$${valorGenerado.toLocaleString('es-CO')}</strong></p>` : ''}
 
             <!-- CONFIRMACIÓN DE ENTREGA — delega a función para evitar anidamiento profundo -->
             ${renderConfirmacionEntrega(a, porConfirmar, progreso, tallas_conf_actual, hasTallasPendientes, reportado, confirmado, devols)}
-
-            <!-- APROBACIÓN DE "NO PUDE CONFECCIONAR" -->
-            ${noConf > 0 ? (() => {
-              const ncEst       = a.no_conf_estado || 'pendiente';
-              const tallasNoConf = a.tallas_no_confeccionadas || {};
-              const tieneTallasNC = Object.keys(tallasNoConf).length > 0;
-              // Detalle por talla
-              const detalleNC = tieneTallasNC
-                ? '<div class="flex flex-wrap gap-1 mb-2">'
-                  + TODAS_TALLAS.filter(t => (tallasNoConf[t] || 0) > 0)
-                    .map(t => '<span class="text-xs px-2 py-0.5 rounded-full font-bold" style="background:rgba(220,38,38,0.12);color:#fca5a5">'
-                      + t + ': ' + tallasNoConf[t] + '</span>').join('')
-                  + '</div>'
-                : '';
-              return `
-              <div class="mt-2 p-3 rounded-xl border ${
-                ncEst === 'aprobado'  ? 'bg-green-900/10 border-green-900/30' :
-                ncEst === 'rechazado' ? 'bg-zinc-800/40 border-zinc-700/40' :
-                'bg-red-500/5 border-red-500/20'}">
-                <p class="text-xs ${ncEst === 'aprobado' ? 'text-green-400/90' : ncEst === 'rechazado' ? 'text-slate-400' : 'text-red-400/90'} mb-1">
-                  ❌ No pudo confeccionar <strong>${noConf}</strong> piezas.
-                  ${ncEst === 'pendiente' ? ' ¿Apruebas descontarlas?' : ''}
-                  ${ncEst === 'aprobado'  ? ' <strong>✓ Aprobado</strong> — ya se descontaron.' : ''}
-                  ${ncEst === 'rechazado' ? ' <strong>✕ Rechazado</strong> — siguen pendientes.' : ''}
-                </p>
-                ${detalleNC}
-                ${ncEst === 'pendiente' ? `
-                <div class="flex gap-2">
-                  <button onclick="resolverNoConfeccionado('${a.id}','aprobado')"
-                    class="flex-1 py-2 bg-green-700 hover:bg-green-600 text-white font-bold rounded-lg text-xs">✓ Aprobar</button>
-                  <button onclick="resolverNoConfeccionado('${a.id}','rechazado')"
-                    class="flex-1 py-2 bg-zinc-700 hover:bg-zinc-600 text-white font-bold rounded-lg text-xs">✕ Rechazar</button>
-                </div>` : `
-                <button onclick="resolverNoConfeccionado('${a.id}','pendiente')"
-                  class="text-xs text-slate-500 hover:text-slate-300 underline">Revisar de nuevo</button>`}
-              </div>`;
-            })() : ''}
 
             ${a.nota_confeccionista ? `<p class="text-blue-300/80 text-xs mt-2">💬 Conf: <em>${escHtml(a.nota_confeccionista)}</em></p>` : ''}
             ${a.rechazo_nota ? `<p class="text-red-400/80 text-xs mt-2">✕ Rechazo: <em>${escHtml(a.rechazo_nota)}</em></p>` : ''}
@@ -1107,6 +1006,12 @@ function renderAsignacionesAdmin(asigs, container) {
               <input type="number" id="edit-asig-cant-${a.id}" value="${a.cantidad_asignada}" min="1"
                 onfocus="this.select()"
                 class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-xl font-bold text-center focus:outline-none focus:border-gold-500" />
+            </div>
+            <div class="mb-3">
+              <label class="text-xs text-slate-400 mb-1 block">Precio por unidad (opcional, en pesos)</label>
+              <input type="number" id="edit-asig-precio-${a.id}" value="${a.precio_unitario || 0}" min="0" step="1"
+                onfocus="this.select()"
+                class="w-full px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white text-lg font-bold text-center focus:outline-none focus:border-gold-500" />
             </div>
             <!-- CURVA DE TALLAS — editable por el admin -->
             <div class="pt-3 border-t border-zinc-800 mb-3">
@@ -1153,15 +1058,18 @@ function renderAsignacionesConf(asigs, container) {
     const tallasDevol = a.tallas_devoluciones      || {};
     const tieneTallas = TODAS_TALLAS.some(t => (curva[t] || 0) > 0);
     const devols   = Number(a.cantidad_devoluciones) || 0;
-    const noConf   = Number(a.cantidad_no_confeccionadas) || 0;
     const asignada = Number(a.cantidad_asignada) || 0;
     const entregada = Number(a.cantidad_entregada) || 0;
+    const confirmado = Number(a.cantidad_confirmada) || 0;
     // cantidad_entregada ya queda neta de devoluciones (se resta en el origen tanto
     // al rechazar en revisión como al registrar una devolución manual), por lo que
     // NO se vuelve a restar "devols" aquí para evitar doble conteo.
     const terminadasEfectivas = entregada;
-    // Pendientes correctas: asignado menos terminadas efectivas
-    const pendientes = Math.max(0, asignada - terminadasEfectivas);
+    // "Asignadas" ahora es el restante real: solo baja cuando el admin ACEPTA
+    // (confirmado) las unidades, no apenas el confeccionista las reporta.
+    const restante = Math.max(0, asignada - confirmado);
+    const precioAsig    = Number(a.precio_unitario) || 0;
+    const valorGanado   = confirmado * precioAsig;
 
     return `
     <div class="card mb-4 overflow-hidden">
@@ -1191,35 +1099,32 @@ function renderAsignacionesConf(asigs, container) {
           <div class="rounded-2xl p-4 text-center" style="background:#1c2a1c; border:1px solid #2d4a2d">
             <div class="text-green-400 text-xs font-semibold mb-1">✅ TERMINADAS</div>
             <div id="conf-entregadas-${a.id}" class="text-white font-black" style="font-size:2.5rem;line-height:1">${terminadasEfectivas}</div>
-            ${devols > 0 ? `<div class="text-xs text-red-400/80 mt-1">(reportaste ${entregada + devols} · se devolvieron ${devols})</div>` : ''}
+            ${entregada > confirmado ? `<div class="text-xs text-yellow-500/80 mt-1">(${entregada - confirmado} esperando revisión del admin)</div>` : ''}
+            ${devols > 0 ? `<div class="text-xs text-red-400/80 mt-1">(se devolvieron ${devols})</div>` : ''}
           </div>
           <div class="rounded-2xl p-4 text-center" style="background:#2a1c0a; border:1px solid #4a3010">
-            <div class="text-yellow-500 text-xs font-semibold mb-1">⏳ PENDIENTES</div>
-            <div id="conf-pendientes-${a.id}" class="text-white font-black" style="font-size:2.5rem;line-height:1">${pendientes}</div>
-            <div class="text-xs text-slate-500 mt-1">de ${asignada} asignadas</div>
+            <div class="text-yellow-500 text-xs font-semibold mb-1">📦 ASIGNADAS</div>
+            <div id="conf-pendientes-${a.id}" class="text-white font-black" style="font-size:2.5rem;line-height:1">${restante}</div>
+            <div class="text-xs text-slate-500 mt-1">por hacer, de ${asignada}</div>
           </div>
         </div>
 
-        <!-- Fila secundaria de datos -->
-        <div class="grid grid-cols-3 gap-1.5 text-center text-xs">
+        <!-- Fila secundaria: precio y valor ganado -->
+        ${precioAsig > 0 ? `
+        <div class="grid grid-cols-2 gap-1.5 text-center text-xs mb-1.5">
           <div class="bg-zinc-800/60 rounded-xl py-2.5 px-1">
-            <div class="text-blue-400 mb-1">🔧 En proceso</div>
-            <div class="text-white font-bold text-xl">${a.cantidad_confeccionada}</div>
+            <div class="text-slate-400 mb-1">💲 Precio unitario</div>
+            <div class="text-white font-bold text-lg">$${precioAsig.toLocaleString('es-CO')}</div>
           </div>
-          <div class="bg-zinc-800/60 rounded-xl py-2.5 px-1">
-            <div class="text-gold-400 mb-1">📦 Asignadas</div>
-            <div class="text-white font-bold text-xl">${asignada}</div>
+          <div class="rounded-xl py-2.5 px-1" style="background:rgba(201,168,76,.08); border:1px solid rgba(201,168,76,.25)">
+            <div class="text-gold-400 mb-1">💰 Valor ganado</div>
+            <div class="text-white font-bold text-lg">$${valorGanado.toLocaleString('es-CO')}</div>
           </div>
-          ${devols > 0 ? `
-          <div class="rounded-xl py-2.5 px-1 text-center" style="background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.2)">
-            <div class="text-red-400 mb-1">🔄 Devueltas</div>
-            <div class="text-white font-bold text-xl">${devols}</div>
-          </div>` : `
-          <div class="bg-zinc-800/60 rounded-xl py-2.5 px-1">
-            <div class="text-slate-500 mb-1">❌ No conf.</div>
-            <div class="text-white font-bold text-xl">${noConf}</div>
-          </div>`}
-        </div>
+        </div>` : ''}
+        ${devols > 0 ? `
+        <div class="rounded-xl py-2 px-3 text-center text-xs mb-1.5" style="background:rgba(220,38,38,0.08); border:1px solid rgba(220,38,38,0.2)">
+          <span class="text-red-400">🔄 Devueltas: <strong class="text-white">${devols}</strong></span>
+        </div>` : ''}
 
         <!-- Devoluciones por talla (si el admin especificó) -->
         ${devols > 0 && Object.keys(tallasDevol).length > 0 ? (() => {
@@ -1233,9 +1138,9 @@ function renderAsignacionesConf(asigs, container) {
             + '</div>';
         })() : ''}
 
-        <!-- Barra de progreso -->
+        <!-- Barra de progreso (basada en lo ya aceptado por el admin) -->
         ${asignada > 0 ? (() => {
-          const pct = Math.min(100, Math.round(terminadasEfectivas/asignada*100));
+          const pct = Math.min(100, Math.round(confirmado/asignada*100));
           return `
           <div class="mt-3">
             <div class="flex justify-between text-xs text-slate-500 mb-1">
@@ -1282,14 +1187,6 @@ function renderAsignacionesConf(asigs, container) {
         </div>
         <p id="entrega-warn-${a.id}" class="hidden text-xs text-red-400 -mt-2"></p>
 
-        <!-- NO PUDE CONFECCIONAR — por talla si hay curva, sino total -->
-        <div>
-          <label class="text-sm font-semibold text-slate-300 mb-2 block">❌ No pude confeccionar
-            <span class="text-xs text-slate-500 font-normal ml-1">(solo piezas que definitivamente no puedes hacer)</span>
-          </label>
-          ${renderNoConfInput(a.id, curva, noConf, a.tallas_no_confeccionadas || {})}
-        </div>
-
         <!-- FECHA DE ENTREGA -->
         <div>
           <label class="text-sm font-semibold text-slate-300 mb-2 block">📅 Fecha de entrega</label>
@@ -1320,6 +1217,26 @@ function renderAsignacionesConf(asigs, container) {
 // ================================================================
 // 13. CRUD — PRENDAS
 // ================================================================
+let newPrendaFotoFile = null;
+let editPrendaFotoFile = null;
+let editPrendaFotoRemoved = false;
+
+function handleNewPrendaFotoSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  newPrendaFotoFile = file;
+  const url = URL.createObjectURL(file);
+  document.getElementById('new-prenda-foto-preview').src = url;
+  document.getElementById('new-prenda-foto-preview-wrap').classList.remove('hidden');
+  document.getElementById('new-prenda-foto-buttons').classList.add('hidden');
+}
+
+function clearNewPrendaFoto() {
+  newPrendaFotoFile = null;
+  document.getElementById('new-prenda-foto-preview-wrap').classList.add('hidden');
+  document.getElementById('new-prenda-foto-buttons').classList.remove('hidden');
+}
+
 async function saveNewPrenda() {
   const nombre      = document.getElementById('new-prenda-nombre').value.trim();
   const descripcion = document.getElementById('new-prenda-descripcion').value.trim();
@@ -1328,16 +1245,113 @@ async function saveNewPrenda() {
   if (!nombre)           { showToast('Ingresa el nombre de la prenda', 'error'); return; }
   if (!total || total<1) { showToast('Ingresa el total de unidades', 'error'); return; }
 
-  const { error } = await sb.from('prendas').insert({
+  const { data: newPrenda, error } = await sb.from('prendas').insert({
     nombre, descripcion, total_unidades: total,
     status: 'por_procesar', created_by: state.user.id
-  });
+  }).select('id').single();
   if (error) { showToast('Error al guardar', 'error'); console.error(error); return; }
+
+  if (newPrendaFotoFile && newPrenda?.id) {
+    const ext  = newPrendaFotoFile.name.split('.').pop() || 'jpg';
+    const path = `muestras/${newPrenda.id}-${Date.now()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('production-photos').upload(path, newPrendaFotoFile, { upsert: true });
+    if (!upErr) {
+      const { data: { publicUrl } } = sb.storage.from('production-photos').getPublicUrl(path);
+      await sb.from('prendas').update({ foto_muestra_url: publicUrl }).eq('id', newPrenda.id);
+    } else {
+      console.error(upErr);
+      showToast('Prenda creada, pero hubo un error al subir la foto', 'error');
+    }
+  }
 
   closeModal('modal-new-prenda');
   ['new-prenda-nombre','new-prenda-descripcion','new-prenda-total'].forEach(id =>
     document.getElementById(id).value = '');
+  clearNewPrendaFoto();
   showToast('✅ Prenda creada');
+  await loadPrendas();
+}
+
+function openEditPrendaModal(prendaId) {
+  const prenda = state.currentPrenda?.id === prendaId
+    ? state.currentPrenda
+    : state.prendas?.find(p => p.id === prendaId);
+  if (!prenda) return;
+
+  editPrendaFotoFile = null;
+  editPrendaFotoRemoved = false;
+
+  document.getElementById('edit-prenda-id').value = prendaId;
+  document.getElementById('edit-prenda-nombre').value = prenda.nombre || '';
+  document.getElementById('edit-prenda-descripcion').value = prenda.descripcion || '';
+  document.getElementById('edit-prenda-total').value = prenda.total_unidades || '';
+
+  const previewWrap = document.getElementById('edit-prenda-foto-preview-wrap');
+  const previewImg  = document.getElementById('edit-prenda-foto-preview');
+  const buttonsWrap = document.getElementById('edit-prenda-foto-buttons');
+  if (prenda.foto_muestra_url) {
+    previewImg.src = prenda.foto_muestra_url;
+    previewWrap.classList.remove('hidden');
+    buttonsWrap.classList.add('hidden');
+  } else {
+    previewWrap.classList.add('hidden');
+    buttonsWrap.classList.remove('hidden');
+  }
+
+  openModal('modal-edit-prenda');
+}
+
+function handleEditPrendaFotoSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  editPrendaFotoFile = file;
+  editPrendaFotoRemoved = false;
+  const url = URL.createObjectURL(file);
+  document.getElementById('edit-prenda-foto-preview').src = url;
+  document.getElementById('edit-prenda-foto-preview-wrap').classList.remove('hidden');
+  document.getElementById('edit-prenda-foto-buttons').classList.add('hidden');
+}
+
+function clearEditPrendaFoto() {
+  editPrendaFotoFile = null;
+  editPrendaFotoRemoved = true;
+  document.getElementById('edit-prenda-foto-preview-wrap').classList.add('hidden');
+  document.getElementById('edit-prenda-foto-buttons').classList.remove('hidden');
+}
+
+async function saveEditPrenda() {
+  const prendaId    = document.getElementById('edit-prenda-id').value;
+  const nombre      = document.getElementById('edit-prenda-nombre').value.trim();
+  const descripcion = document.getElementById('edit-prenda-descripcion').value.trim();
+  const total       = parseInt(document.getElementById('edit-prenda-total').value);
+
+  if (!prendaId) return;
+  if (!nombre)           { showToast('Ingresa el nombre de la prenda', 'error'); return; }
+  if (!total || total<1) { showToast('Ingresa el total de unidades', 'error'); return; }
+
+  const updateData = { nombre, descripcion, total_unidades: total };
+
+  if (editPrendaFotoFile) {
+    const ext  = editPrendaFotoFile.name.split('.').pop() || 'jpg';
+    const path = `muestras/${prendaId}-${Date.now()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('production-photos').upload(path, editPrendaFotoFile, { upsert: true });
+    if (upErr) {
+      console.error(upErr);
+      showToast('Error al subir la nueva foto', 'error');
+      return;
+    }
+    const { data: { publicUrl } } = sb.storage.from('production-photos').getPublicUrl(path);
+    updateData.foto_muestra_url = publicUrl;
+  } else if (editPrendaFotoRemoved) {
+    updateData.foto_muestra_url = null;
+  }
+
+  const { error } = await sb.from('prendas').update(updateData).eq('id', prendaId);
+  if (error) { showToast('Error al guardar cambios', 'error'); console.error(error); return; }
+
+  closeModal('modal-edit-prenda');
+  showToast('✅ Prenda actualizada');
+  await loadPrendaDetail(prendaId, false);
   await loadPrendas();
 }
 
@@ -1391,6 +1405,7 @@ async function saveNewAsignacion() {
   const descripcion = document.getElementById('asig-descripcion').value.trim();
   const nota        = document.getElementById('asig-nota').value.trim();
   const cantidad    = parseInt(document.getElementById('asig-cantidad').value);
+  const precio      = parseFloat(document.getElementById('asig-precio')?.value) || 0;
 
   if (!confId)               { showToast('Selecciona un confeccionista', 'error'); return; }
   if (!parte)                { showToast('Ingresa la parte de la prenda', 'error'); return; }
@@ -1413,7 +1428,7 @@ async function saveNewAsignacion() {
   const { data: newAsig, error } = await sb.from('asignaciones').insert({
     prenda_id: prendaId, confeccionista_id: confId,
     parte, descripcion, nota, cantidad_asignada: cantidad,
-    curva_tallas
+    curva_tallas, precio_unitario: precio
   }).select('id').single();
   if (error) { showToast('Error al guardar asignación', 'error'); console.error(error); return; }
 
@@ -1432,7 +1447,7 @@ async function saveNewAsignacion() {
   }
 
   closeModal('modal-new-asignacion');
-  ['asig-parte','asig-descripcion','asig-nota','asig-cantidad'].forEach(id =>
+  ['asig-parte','asig-descripcion','asig-nota','asig-cantidad','asig-precio'].forEach(id =>
     document.getElementById(id).value = '');
   document.getElementById('asig-confeccionista').value = '';
   // Limpiar tallas
@@ -1452,23 +1467,8 @@ async function saveAsignacionProgress(asigId) {
   const fechaEntrega  = fechaRaw ? new Date(fechaRaw).toISOString() : null;
 
   const asig = state.currentAsignaciones.find(x => x.id === asigId);
-  const curva = asig?.curva_tallas || {};
-  const tallasConCurva = TODAS_TALLAS.filter(t => (curva[t] || 0) > 0);
 
-  // Leer "no pude confeccionar" — por talla si hay curva, sino campo único
-  let noConf = 0;
-  const tallas_no_confeccionadas = {};
-  if (tallasConCurva.length > 0) {
-    tallasConCurva.forEach(t => {
-      const v = parseInt(document.getElementById(`inp-noconf-${asigId}-${t}`)?.value) || 0;
-      if (v > 0) tallas_no_confeccionadas[t] = v;
-      noConf += v;
-    });
-  } else {
-    noConf = parseInt(document.getElementById(`inp-noconf-${asigId}`)?.value) || 0;
-  }
-
-  // El total entregado y "en proceso" se derivan de las cantidades por talla.
+  // El total entregado se deriva de las cantidades por talla que reporta el confeccionista.
   const entrega = syncEntregaResumen(asigId);
   if (entrega.errores.length) {
     showToast(entrega.errores[0], 'error');
@@ -1480,18 +1480,10 @@ async function saveAsignacionProgress(asigId) {
   const updateData = {
     cantidad_confeccionada:     entregada,
     cantidad_entregada:         entregada,
-    cantidad_no_confeccionadas: noConf,
-    tallas_no_confeccionadas,
     nota_confeccionista:        notaConf,
     fecha_entrega:              fechaEntrega,
     tallas_progreso
   };
-
-  // Si cambió la cantidad de "no pude confeccionar", resetear estado de aprobación
-  const noConfAnterior = Number(asig?.cantidad_no_confeccionadas) || 0;
-  if (noConf !== noConfAnterior) {
-    updateData.no_conf_estado = 'pendiente';
-  }
 
   // Si el confeccionista actualiza entregado (trabaja de nuevo), limpiar rechazo
   const entregadaAnterior = Number(asig?.cantidad_entregada) || 0;
@@ -1512,6 +1504,7 @@ function toggleAsigEdit(asigId) {
 
 async function saveAdminAsigEdit(asigId) {
   const cantidadInput = parseInt(document.getElementById(`edit-asig-cant-${asigId}`)?.value) || 0;
+  const precioInput   = parseFloat(document.getElementById(`edit-asig-precio-${asigId}`)?.value) || 0;
   const curva_tallas  = readTallasInput(`edit-talla-${asigId}`);
 
   if (cantidadInput < 1) { showToast('La cantidad debe ser mayor a 0', 'error'); return; }
@@ -1574,6 +1567,7 @@ async function saveAdminAsigEdit(asigId) {
 
   const updateData = {
     cantidad_asignada:    cantidadInput,
+    precio_unitario:      precioInput,
     cantidad_devoluciones,
     tallas_devoluciones,
     curva_tallas,
@@ -1780,53 +1774,6 @@ async function rechazarEntregaParcial(asigId, hasTallasPendientes = false) {
   }
 }
 
-// Aprobación / rechazo de "no pude confeccionar"
-async function resolverNoConfeccionado(asigId, decision) {
-  const asig   = state.currentAsignaciones.find(x => x.id === asigId);
-  const noConf = Number(asig?.cantidad_no_confeccionadas) || 0;
-  const estadoActual = asig?.no_conf_estado || 'pendiente';
-  const tallasNoConf = asig?.tallas_no_confeccionadas || {};
-
-  const updateData = { no_conf_estado: decision };
-
-  if (decision === 'aprobado' && noConf > 0) {
-    // Descontar del total asignado
-    updateData.cantidad_asignada = Math.max(0, (Number(asig?.cantidad_asignada) || 0) - noConf);
-    // Descontar también de la curva de tallas si hay info por talla
-    if (Object.keys(tallasNoConf).length > 0) {
-      const nuevaCurva = { ...(asig?.curva_tallas || {}) };
-      TODAS_TALLAS.forEach(t => {
-        if (tallasNoConf[t] > 0) {
-          nuevaCurva[t] = Math.max(0, (nuevaCurva[t] || 0) - tallasNoConf[t]);
-          if (nuevaCurva[t] === 0) delete nuevaCurva[t];
-        }
-      });
-      updateData.curva_tallas = nuevaCurva;
-    }
-  } else if (decision === 'pendiente' && estadoActual === 'aprobado' && noConf > 0) {
-    // Restaurar lo que se había descontado al aprobar
-    updateData.cantidad_asignada = (Number(asig?.cantidad_asignada) || 0) + noConf;
-    if (Object.keys(tallasNoConf).length > 0) {
-      const nuevaCurva = { ...(asig?.curva_tallas || {}) };
-      TODAS_TALLAS.forEach(t => {
-        if (tallasNoConf[t] > 0) {
-          nuevaCurva[t] = (nuevaCurva[t] || 0) + tallasNoConf[t];
-        }
-      });
-      updateData.curva_tallas = nuevaCurva;
-    }
-  }
-
-  const { error } = await sb.from('asignaciones').update(updateData).eq('id', asigId);
-  if (error) { showToast('Error al guardar decisión', 'error'); return; }
-
-  const msg = decision === 'aprobado'  ? `✓ Aprobado — se descontaron ${noConf} piezas`
-            : decision === 'rechazado' ? '✕ Rechazado — el confeccionista sigue siendo responsable'
-            : 'Marcado para revisión';
-  showToast(msg);
-  await loadPrendaDetail(state.currentPrenda.id, false);
-}
-
 function confirmDeleteAsig(asigId) {
   confirmAction(
     '¿Eliminar asignación?',
@@ -1968,6 +1915,8 @@ function renderUsers() {
             : 'border-red-800 text-red-400 hover:text-green-400 hover:border-green-800'}">
           ${u.is_active ? 'Activo' : 'Inactivo'}
         </button>
+        <button onclick="openEditUserModal('${u.id}')"
+          class="text-xs px-3 py-1.5 rounded-lg border border-zinc-700 text-gold-400 hover:border-gold-500">✏️</button>
         <button onclick="confirmDeleteUser('${u.id}','${escHtml(u.full_name||'')}')"
           class="text-xs px-3 py-1.5 rounded-lg border border-red-900/50 text-red-400 hover:bg-red-900/20">🗑</button>
       </div>
@@ -2029,6 +1978,62 @@ async function toggleUserActive(userId, current) {
   await loadConfeccionistas();
 }
 
+function openEditUserModal(userId) {
+  const u = (state.allUsers || []).find(x => x.id === userId);
+  if (!u) return;
+  document.getElementById('edit-user-id').value = userId;
+  document.getElementById('edit-user-name').value = u.full_name || '';
+  document.getElementById('edit-user-password').value = '';
+  document.getElementById('edit-user-error').classList.add('hidden');
+  openModal('modal-edit-user');
+  setTimeout(() => document.getElementById('edit-user-name').focus(), 200);
+}
+
+async function saveEditUser() {
+  const userId   = document.getElementById('edit-user-id').value;
+  const name     = document.getElementById('edit-user-name').value.trim();
+  const password = document.getElementById('edit-user-password').value;
+  const errEl    = document.getElementById('edit-user-error');
+  const btn      = document.getElementById('btn-save-edit-user');
+
+  if (!userId) return;
+  if (!name) { errEl.textContent = 'Ingresa el nombre.'; errEl.classList.remove('hidden'); return; }
+  if (password && password.length < 6) {
+    errEl.textContent = 'Contraseña mínimo 6 caracteres.'; errEl.classList.remove('hidden'); return;
+  }
+
+  btn.textContent = 'Guardando...'; btn.disabled = true; errEl.classList.add('hidden');
+
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 15000);
+
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const body = { user_id: userId, full_name: name };
+    if (password) body.password = password;
+    const res = await fetch(`${EDGE_BASE}/update-user`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${session.access_token}` },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+    clearTimeout(timeout);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Error al actualizar');
+
+    closeModal('modal-edit-user');
+    showToast('✅ Usuario actualizado');
+    await loadUsers();
+    await loadConfeccionistas();
+  } catch (err) {
+    clearTimeout(timeout);
+    errEl.textContent = err.name === 'AbortError' ? 'Tiempo agotado.' : (err.message || 'Error al actualizar.');
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.textContent = 'Guardar Cambios'; btn.disabled = false;
+  }
+}
+
 function confirmDeleteUser(userId, name) {
   confirmAction(
     `¿Eliminar a ${name}?`,
@@ -2059,6 +2064,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 function openNewPrendaModal() {
   ['new-prenda-nombre','new-prenda-descripcion','new-prenda-total']
     .forEach(id => document.getElementById(id).value = '');
+  clearNewPrendaFoto();
   openModal('modal-new-prenda');
   setTimeout(() => document.getElementById('new-prenda-nombre').focus(), 200);
 }
@@ -2068,7 +2074,7 @@ function openNewAsignacionModal() {
   sel.innerHTML = '<option value="">Seleccionar confeccionista...</option>' +
     state.confeccionistas.map(c =>
       `<option value="${c.id}">${escHtml(c.full_name)} — ${escHtml(c.phone||'')}</option>`).join('');
-  ['asig-parte','asig-descripcion','asig-nota','asig-cantidad']
+  ['asig-parte','asig-descripcion','asig-nota','asig-cantidad','asig-precio']
     .forEach(id => document.getElementById(id).value = '');
   TODAS_TALLAS.forEach(t => {
     const el = document.getElementById(`modal-talla-${t}`);
