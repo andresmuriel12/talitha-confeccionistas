@@ -482,14 +482,10 @@ function renderTableroGeneral(prenda, asigs) {
         <div class="text-white font-bold text-lg">${s.pendientes}</div>
       </div>
       <div class="bg-zinc-800 rounded-xl p-2.5">
-        <div class="text-slate-400 mb-0.5">❌ No conf. (aprobadas)</div>
-        <div class="text-white font-bold text-lg">${s.noConfAprobadas}</div>
-      </div>
-      <div class="bg-zinc-800 rounded-xl p-2.5">
         <div class="text-red-400 mb-0.5">🔄 Devoluciones</div>
         <div class="text-white font-bold text-lg">${s.devoluciones}</div>
       </div>
-      <div class="col-span-2 bg-zinc-800 rounded-xl p-2.5">
+      <div class="bg-zinc-800 rounded-xl p-2.5">
         <div class="text-green-400 mb-0.5">✅ Confirmadas (netas)</div>
         <div class="text-white font-bold text-lg">${s.confirmadasNetas}</div>
       </div>
@@ -1182,7 +1178,7 @@ function renderAsignacionesConf(asigs, container) {
           </div>
           <div>
             <div class="text-xs text-yellow-500 font-semibold">PENDIENTES</div>
-            <div id="entrega-pendientes-${a.id}" class="text-2xl text-white font-black">${pendientes}</div>
+            <div id="entrega-pendientes-${a.id}" class="text-2xl text-white font-black">${restante}</div>
           </div>
         </div>
         <p id="entrega-warn-${a.id}" class="hidden text-xs text-red-400 -mt-2"></p>
