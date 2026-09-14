@@ -614,8 +614,10 @@ function readAsigInsumoRows() {
 // ================================================================
 // 10d. TALLAS — helpers
 // ================================================================
-function renderTallasInput(prefix, curva, onInput = '') {
+function renderTallasInput(prefix, curva, onInput = '', curvaAsignada = null) {
   // curva: {S:30, M:40, ...} — solo muestra las que tienen valor o todas para input
+  // curvaAsignada (opcional): cuando se pasa, se muestra debajo de cada talla
+  // cuántas unidades le asignó el admin en esa talla (contexto para quien reporta).
   const grupos = [
     { label: '👧 Tallas niño', tallas: TALLAS_KIDS },
     { label: '👔 Tallas adulto', tallas: TALLAS_ADULT }
@@ -633,6 +635,7 @@ function renderTallasInput(prefix, curva, onInput = '') {
             step="1" placeholder="0" ${onInput ? `oninput="${onInput}"` : ''}
             onfocus="if(this.value==='0'||this.value==='')this.value='';this.select()"
             class="w-full px-1 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-sm font-bold text-center focus:outline-none focus:border-gold-500" />
+          ${curvaAsignada && (curvaAsignada[t] || 0) > 0 ? `<div class="text-[10px] text-slate-500 mt-0.5">de ${curvaAsignada[t]}</div>` : ''}
         </div>`).join('')}
       </div>
     </div>`;
@@ -743,6 +746,7 @@ function renderTallasResumen(curva, progreso, isAdmin, confirmadas = {}) {
           + '<div style="flex:1;min-width:0">'
           +   '<div class="text-xs text-slate-400">'
           +     'Hice: <strong class="text-white">' + hecho_t + '</strong>'
+          +     (curva_t > 0 ? ' <span class="text-slate-500">de ' + curva_t + ' asignadas</span>' : '')
           +     (conf_t > 0 ? ' &middot; <span class="text-green-400 font-semibold">✅ ' + conf_t + ' aprobadas</span>' : '')
           +     (pendConf > 0 && tieneConfirmadas ? ' &middot; <span class="text-yellow-500">⏳ ' + pendConf + ' por aprobar</span>' : '')
           +   '</div>'
@@ -1105,6 +1109,19 @@ function renderAsignacionesConf(asigs, container) {
           </div>
         </div>
 
+        <!-- DISTRIBUCIÓN POR TALLA ASIGNADA — lo que el admin le repartió a esta confeccionista -->
+        ${tieneTallas ? `
+        <div class="mt-1 mb-2">
+          <p class="text-xs text-slate-500 font-medium mb-1.5">📐 Así te asignaron las tallas (de ${asignada} en total)</p>
+          <div class="grid grid-cols-5 gap-1 text-center text-xs">
+            ${TODAS_TALLAS.filter(t => (curva[t] || 0) > 0).map(t => `
+            <div class="bg-zinc-800 rounded-lg py-1.5 px-1">
+              <div class="text-slate-400 font-medium mb-0.5">${t}</div>
+              <div class="text-white font-bold text-sm">${curva[t]}</div>
+            </div>`).join('')}
+          </div>
+        </div>` : ''}
+
         <!-- Fila secundaria: precio y valor ganado -->
         ${precioAsig > 0 ? `
         <div class="grid grid-cols-2 gap-1.5 text-center text-xs mb-1.5">
@@ -1167,7 +1184,7 @@ function renderAsignacionesConf(asigs, container) {
         <div>
           <p class="text-sm font-bold text-white mb-1">✅ ¿Cuántas terminaste por talla?</p>
           ${tieneTallas ? '' : `<p class="text-xs text-slate-500 mb-2">Llena solo las tallas que aplican a esta asignación.</p>`}
-          ${renderTallasInput(`tp-${a.id}`, progreso, `syncEntregaResumen('${a.id}')`)}
+          ${renderTallasInput(`tp-${a.id}`, progreso, `syncEntregaResumen('${a.id}')`, curva)}
         </div>
 
         <!-- TOTALES CALCULADOS AUTOMÁTICAMENTE DESDE LAS TALLAS -->
