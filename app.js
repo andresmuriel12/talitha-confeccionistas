@@ -2009,7 +2009,7 @@ function renderUsers() {
     const isAdm = u.role === 'admin';
     const roleBadge = isAdm
       ? `<span class="text-xs px-2 py-0.5 rounded-full bg-gold-500/20 text-gold-400 border border-gold-500/30 font-medium">⭐ Admin</span>`
-      : `<span class="text-xs px-2 py-0.5 rounded-full bg-wine-500/20 text-wine-300 border border-wine-500/30 font-medium">🧵 Confeccionista</span>`;
+      : `<span class="text-xs px-2 py-0.5 rounded-full bg-neutral-500/20 text-neutral-300 border border-neutral-500/30 font-medium">🧵 Confeccionista</span>`;
     return `
     <div class="card p-4 flex items-center gap-3">
       <div class="w-11 h-11 rounded-full bg-gold-500/20 flex items-center justify-center text-gold-400 font-bold text-base shrink-0">
