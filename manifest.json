@@ -3,8 +3,8 @@
   "short_name": "Talitha Conf",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0d0d0d",
-  "theme_color": "#0f172a",
+  "background_color": "#150e11",
+  "theme_color": "#150e11",
   "orientation": "portrait",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
