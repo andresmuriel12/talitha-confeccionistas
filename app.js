@@ -546,7 +546,7 @@ function renderTableroGeneral(prenda, asigs) {
         <div class="text-green-400 mb-0.5">✅ Confirmadas (netas)</div>
         <div class="text-white font-bold text-lg">${s.confirmadasNetas}</div>
       </div>
-      <div class="col-span-2 rounded-xl p-2.5" style="background:rgba(204,154,82,.1); border:1px solid rgba(204,154,82,.25)">
+      <div class="col-span-2 rounded-xl p-2.5" style="background:rgba(202,158,103,.1); border:1px solid rgba(202,158,103,.25)">
         <div class="text-gold-400 mb-0.5">💰 Valor pagado</div>
         <div class="text-white font-bold text-lg">$${s.valorPagado.toLocaleString('es-CO')}</div>
       </div>
@@ -991,7 +991,7 @@ function renderAsignacionesAdmin(asigs, container) {
           <p class="text-slate-500 text-xs">${escHtml(g.phone||'')}</p>
         </div>
         ${valorGrupo > 0 ? `
-        <div class="shrink-0 text-right px-2.5 py-1.5 rounded-xl" style="background:rgba(204,154,82,.1); border:1px solid rgba(204,154,82,.25)">
+        <div class="shrink-0 text-right px-2.5 py-1.5 rounded-xl" style="background:rgba(202,158,103,.1); border:1px solid rgba(202,158,103,.25)">
           <div class="text-[10px] text-gold-400 leading-none mb-0.5">💰 Pagado</div>
           <div class="text-xs font-bold text-white leading-none">$${valorGrupo.toLocaleString('es-CO')}</div>
         </div>` : ''}

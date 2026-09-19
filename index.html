@@ -19,10 +19,10 @@
       /* Paleta de marca Talitha Pijamas (@talithapijamasoficial): dorado del
          logo + tonos vino/rosa de sus fotos de producto, sobre una base oscura
          cálida (no negro plano) para que la app se sienta boutique, no técnica. */
-      --color-gold-300: #ecd7ac;
-      --color-gold-400: #ddb877;
-      --color-gold-500: #cc9a52;
-      --color-gold-600: #a97b37;
+      --color-gold-300: #dfc5a4;
+      --color-gold-400: #d5b185;
+      --color-gold-500: #ca9e67;
+      --color-gold-600: #be8845;
       --color-wine-300: #e3aebd;
       --color-wine-400: #c97b91;
       --color-wine-500: #9c3b56;
@@ -57,32 +57,32 @@
       background:#150e11; border:1px solid #43323a; border-radius:.75rem;
       padding:.65rem .9rem; -webkit-appearance:none; appearance:none;
     }
-    input:focus, textarea:focus, select:focus { outline:none; border-color:#cc9a52; }
+    input:focus, textarea:focus, select:focus { outline:none; border-color:#ca9e67; }
     select {
       background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
       background-repeat:no-repeat; background-position:right .75rem center; padding-right:2.25rem;
     }
-    input[type=checkbox], input[type=radio] { width:auto; height:auto; padding:0; accent-color:#cc9a52; }
+    input[type=checkbox], input[type=radio] { width:auto; height:auto; padding:0; accent-color:#ca9e67; }
     /* Colores de marca (gold / vino / talitha): definidos también en CSS plano,
        por si Tailwind no alcanza a generarlos para contenido agregado
        dinámicamente tras iniciar sesión. Si Tailwind sí carga, sus propias
        clases (misma especificidad, mismo valor) no generan conflicto. */
-    .bg-gold-500 { background-color:#cc9a52; }
-    .bg-gold-600 { background-color:#a97b37; }
-    .text-gold-300 { color:#ecd7ac; }
-    .text-gold-400 { color:#ddb877; }
-    .border-gold-500 { border-color:#cc9a52; }
+    .bg-gold-500 { background-color:#ca9e67; }
+    .bg-gold-600 { background-color:#be8845; }
+    .text-gold-300 { color:#dfc5a4; }
+    .text-gold-400 { color:#d5b185; }
+    .border-gold-500 { border-color:#ca9e67; }
     .bg-talitha-dark { background-color:#150e11; }
     .bg-talitha-surface { background-color:#1f1519; }
     .bg-talitha-card { background-color:#271a1f; }
-    .hover\:bg-gold-600:hover { background-color:#a97b37; }
-    .active\:bg-gold-600:active { background-color:#a97b37; }
-    .hover\:border-gold-500:hover { border-color:#cc9a52; }
-    .hover\:text-gold-400:hover { color:#ddb877; }
-    .bg-gold-500\/5 { background-color:rgba(204,154,82,.05); }
-    .bg-gold-500\/10 { background-color:rgba(204,154,82,.10); }
-    .bg-gold-500\/20 { background-color:rgba(204,154,82,.20); }
-    .text-gold-400\/90 { color:rgba(221,184,119,.9); }
+    .hover\:bg-gold-600:hover { background-color:#be8845; }
+    .active\:bg-gold-600:active { background-color:#be8845; }
+    .hover\:border-gold-500:hover { border-color:#ca9e67; }
+    .hover\:text-gold-400:hover { color:#d5b185; }
+    .bg-gold-500\/5 { background-color:rgba(202,158,103,.05); }
+    .bg-gold-500\/10 { background-color:rgba(202,158,103,.10); }
+    .bg-gold-500\/20 { background-color:rgba(202,158,103,.20); }
+    .text-gold-400\/90 { color:rgba(213,177,133,.9); }
     .text-wine-300 { color:#e3aebd; }
     .text-wine-400 { color:#c97b91; }
     .bg-wine-500 { background-color:#9c3b56; }
@@ -111,7 +111,7 @@
 
     /* Status badges — el "en proceso" se recolorea a rosa/vino de marca en vez
        de azul, que desentonaba con la paleta dorado + vino del resto de la app. */
-    .badge-por-procesar { background:rgba(221,184,119,.14); color:#ecd7ac; border:1px solid rgba(221,184,119,.3); }
+    .badge-por-procesar { background:rgba(213,177,133,.14); color:#dfc5a4; border:1px solid rgba(213,177,133,.3); }
     .badge-en-proceso   { background:rgba(201,123,145,.16); color:#e3aebd; border:1px solid rgba(201,123,145,.35); }
     .badge-entregado    { background:rgba(52,211,153,.14);  color:#6ee7b7; border:1px solid rgba(52,211,153,.3); }
 
@@ -121,13 +121,13 @@
 
     /* Filter tabs */
     .filter-tab { padding:6px 14px; border-radius:99px; font-size:12px; font-weight:500; white-space:nowrap; transition:all .15s; color:#8a7278; background:#21161a; border:1px solid #43323a; }
-    .filter-tab.active { background:rgba(204,154,82,.16); color:#ddb877; border-color:rgba(204,154,82,.4); }
+    .filter-tab.active { background:rgba(202,158,103,.16); color:#d5b185; border-color:rgba(202,158,103,.4); }
 
     /* Nav */
     .nav-item { display:flex; flex-direction:column; align-items:center; gap:3px; font-size:10px; font-weight:500; color:#8a7278; flex:1; padding:6px 0; transition:color .15s, background .15s; }
-    .nav-item.active { color:#ddb877; }
+    .nav-item.active { color:#d5b185; }
     .nav-item svg { transition:stroke .15s; }
-    .nav-item.active svg { stroke:#ddb877; }
+    .nav-item.active svg { stroke:#d5b185; }
 
     /* Tablet / Desktop — la barra inferior se convierte en sidebar fijo a la izquierda */
     @media (min-width: 768px) {
@@ -143,7 +143,7 @@
       #nav-admin > div, #nav-conf > div { display:flex; flex-direction: column; height: 100%; padding: 1.25rem .75rem; gap: .25rem; }
       .nav-item { flex-direction: row; justify-content: flex-start; align-items: center; gap: .75rem; font-size: 13px; padding: .7rem .9rem; border-radius: .75rem; flex: none; }
       .nav-item:hover { background: #21161a; }
-      .nav-item.active { background: rgba(204,154,82,.12); }
+      .nav-item.active { background: rgba(202,158,103,.12); }
       #prendas-stats, #view-prendas > .flex, #prendas-list,
       #view-prenda-detail > div, #view-users > div, #view-users #users-list, #view-export > div {
         max-width: 48rem; margin-left: auto; margin-right: auto; width: 100%;
@@ -164,14 +164,14 @@
     @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
     .card {
       background: linear-gradient(160deg, #241820 0%, #1c1418 100%);
-      border:1px solid rgba(221,184,119,.12); border-radius:20px;
+      border:1px solid rgba(213,177,133,.12); border-radius:20px;
       box-shadow: 0 2px 16px rgba(0,0,0,.35);
     }
     .card:active { transform:scale(.99); }
     .btn-gold {
-      background: linear-gradient(135deg, #ddb877 0%, #cc9a52 55%, #a97b37 100%);
+      background: linear-gradient(135deg, #d5b185 0%, #ca9e67 55%, #be8845 100%);
       color:#1c1006; font-weight:700; border-radius:14px; padding:12px; font-size:14px; width:100%;
-      transition: filter .15s, transform .1s; box-shadow: 0 4px 16px rgba(204,154,82,.28);
+      transition: filter .15s, transform .1s; box-shadow: 0 4px 16px rgba(202,158,103,.28);
     }
     .btn-gold:hover { filter:brightness(1.08); }
     .btn-gold:active { filter:brightness(.93); transform:scale(.99); }
@@ -183,7 +183,7 @@
     /* Modal overlay — centrado en PC/tablet, bottom-sheet en móvil */
     .modal-overlay { position:fixed; inset:0; background:rgba(10,5,7,.8); backdrop-filter:blur(6px); z-index:50; display:none; align-items:center; justify-content:center; padding:20px; }
     .modal-overlay.open { display:flex; }
-    .modal-sheet { background:#1f1519; border:1px solid rgba(221,184,119,.14); border-radius:24px; padding:24px; width:100%; max-width:500px; max-height:90vh; overflow-y:auto; box-shadow:0 25px 60px rgba(0,0,0,.6); }
+    .modal-sheet { background:#1f1519; border:1px solid rgba(213,177,133,.14); border-radius:24px; padding:24px; width:100%; max-width:500px; max-height:90vh; overflow-y:auto; box-shadow:0 25px 60px rgba(0,0,0,.6); }
     @media (max-width:600px) {
       .modal-overlay { align-items:flex-end; padding:0; }
       .modal-sheet { border-radius:24px 24px 0 0; max-width:100%; border-bottom:none; }
@@ -213,7 +213,7 @@
   <div class="w-full max-w-sm" style="width:100%;max-width:24rem;margin:auto">
     <div class="text-center mb-8">
       <div style="position:relative;width:clamp(120px,40vw,200px);height:clamp(120px,40vw,200px);margin:0 auto 1rem">
-        <div style="position:absolute;inset:-14%;border-radius:50%;background:conic-gradient(from 200deg, #cc9a52, #9c3b56, #c97b91, #cc9a52);filter:blur(2px);opacity:.55"></div>
+        <div style="position:absolute;inset:-14%;border-radius:50%;background:conic-gradient(from 200deg, #ca9e67, #9c3b56, #c97b91, #ca9e67);filter:blur(2px);opacity:.55"></div>
         <div style="position:absolute;inset:-2%;border-radius:50%;background:#150e11"></div>
         <img src="/logofinal.png" class="object-contain drop-shadow-lg" style="position:relative;width:100%;height:100%" />
       </div>
