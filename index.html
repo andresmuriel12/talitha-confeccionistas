@@ -287,12 +287,24 @@
           <div class="text-xs text-slate-500 mt-0.5">Por procesar</div>
         </div>
         <div class="bg-zinc-900 rounded-xl p-3 text-center border border-zinc-800">
-          <div id="stat-en-proceso" class="text-2xl font-bold text-blue-400">0</div>
+          <div id="stat-en-proceso" class="text-2xl font-bold text-wine-300">0</div>
           <div class="text-xs text-slate-500 mt-0.5">En proceso</div>
         </div>
         <div class="bg-zinc-900 rounded-xl p-3 text-center border border-zinc-800">
           <div id="stat-entregado" class="text-2xl font-bold text-green-400">0</div>
           <div class="text-xs text-slate-500 mt-0.5">Entregado</div>
+        </div>
+      </div>
+
+      <!-- Totales de dinero/unidades ya aceptadas por el admin (solo admin) -->
+      <div id="prendas-stats-money" class="grid grid-cols-2 gap-2 px-3 pb-3 hidden">
+        <div class="bg-zinc-900 rounded-xl p-3 text-center border border-zinc-800">
+          <div id="stat-total-aceptado" class="text-xl font-bold text-green-400">0</div>
+          <div class="text-xs text-slate-500 mt-0.5">✅ Unid. aceptadas</div>
+        </div>
+        <div class="bg-zinc-900 rounded-xl p-3 text-center border border-zinc-800">
+          <div id="stat-total-pagado" class="text-xl font-bold text-gold-400">$0</div>
+          <div class="text-xs text-slate-500 mt-0.5">💰 Total pagado</div>
         </div>
       </div>
 
@@ -483,23 +495,7 @@
         <input id="edit-prenda-total" type="number" placeholder="0" min="1"
           class="w-full px-4 py-3 rounded-xl bg-talitha-dark border border-zinc-700 text-sm focus:outline-none focus:border-gold-500 text-center text-lg font-bold" />
       </div>
-      <div class="pt-2 border-t border-zinc-800">
-        <label class="text-xs text-slate-400 mb-1 block">Foto de muestra <span class="text-slate-600 font-normal">(opcional)</span></label>
-        <div id="edit-prenda-foto-preview-wrap" class="hidden mb-2">
-          <img id="edit-prenda-foto-preview" class="w-full h-40 object-cover rounded-xl border border-zinc-700" />
-          <button type="button" onclick="clearEditPrendaFoto()" class="mt-1 text-xs text-red-400 hover:text-red-300">✕ Quitar foto</button>
-        </div>
-        <div id="edit-prenda-foto-buttons" class="grid grid-cols-2 gap-2">
-          <label class="flex items-center justify-center gap-1.5 py-2.5 border border-zinc-700 hover:border-gold-500 rounded-xl text-xs text-slate-400 hover:text-gold-400 cursor-pointer">
-            📷 Tomar foto
-            <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handleEditPrendaFotoSelect(this)" />
-          </label>
-          <label class="flex items-center justify-center gap-1.5 py-2.5 border border-zinc-700 hover:border-gold-500 rounded-xl text-xs text-slate-400 hover:text-gold-400 cursor-pointer">
-            🖼️ De galería
-            <input type="file" accept="image/*" class="hidden" onchange="handleEditPrendaFotoSelect(this)" />
-          </label>
-        </div>
-      </div>
+      <p class="text-xs text-slate-500 pt-2 border-t border-zinc-800">📸 Las fotos de muestra y las internas se administran directamente en el detalle de la prenda.</p>
     </div>
     <div class="flex gap-3 mt-6">
       <button onclick="closeModal('modal-edit-prenda')" class="flex-1 py-3 rounded-xl border border-zinc-700 text-slate-400 text-sm font-medium">Cancelar</button>

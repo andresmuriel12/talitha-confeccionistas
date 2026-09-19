@@ -275,7 +275,7 @@ function setupRealtime() {
 // ================================================================
 async function loadPrendas() {
   const { data, error } = await sb.from('prendas')
-    .select('*, asignaciones(id, confeccionista_id, confeccionista:profiles!confeccionista_id(full_name))')
+    .select('*, asignaciones(id, confeccionista_id, cantidad_asignada, cantidad_confirmada, cantidad_devoluciones, precio_unitario, confeccionista:profiles!confeccionista_id(full_name))')
     .order('created_at', { ascending: false });
 
   if (error) { console.error('loadPrendas:', error); return; }
@@ -309,8 +309,8 @@ async function loadPrendaDetail(prendaId, navigate = true) {
   // Como las tablas están relacionadas por llave foránea, se puede pedir todo
   // anidado en UNA sola consulta. Medido en producción: ~650ms → ~140ms.
   const nestedSelect = isAdmin
-    ? '*, asignaciones(*, confeccionista:profiles!confeccionista_id(id, full_name, phone), asignacion_fotos(*), asignacion_insumos(*))'
-    : '*, asignaciones(*, asignacion_fotos(*), asignacion_insumos(*))';
+    ? '*, prenda_fotos(*), asignaciones(*, confeccionista:profiles!confeccionista_id(id, full_name, phone), asignacion_fotos(*), asignacion_insumos(*))'
+    : '*, prenda_fotos(*), asignaciones(*, asignacion_fotos(*), asignacion_insumos(*))';
 
   const { data: prenda, error: pErr } = await sb.from('prendas')
     .select(nestedSelect)
@@ -325,6 +325,7 @@ async function loadPrendaDetail(prendaId, navigate = true) {
       state.currentAsignaciones = [];
       state.currentFotos = {};
       state.currentAsigInsumos = {};
+      state.currentPrendaFotos = { muestra: [], admin: [] };
       goBack();
     }
     return;
@@ -342,11 +343,22 @@ async function loadPrendaDetail(prendaId, navigate = true) {
     delete a.asignacion_insumos;
   });
 
+  // Fotos a nivel de prenda: 'muestra' (la ve admin + confeccionista asignada) y
+  // 'admin' (solo contexto interno, RLS ya se encarga de que el confeccionista
+  // nunca reciba estas filas aunque el front tuviera un bug).
+  const prendaFotosOrdenadas = (prenda.prenda_fotos || []).sort((x, y) => new Date(x.created_at) - new Date(y.created_at));
+  const currentPrendaFotos = {
+    muestra: prendaFotosOrdenadas.filter(f => f.visibility === 'muestra'),
+    admin:   prendaFotosOrdenadas.filter(f => f.visibility === 'admin')
+  };
+
   delete prenda.asignaciones;
+  delete prenda.prenda_fotos;
   state.currentPrenda       = prenda;
   state.currentAsignaciones = asigs;
   state.currentFotos        = fotosPorAsig;
   state.currentAsigInsumos  = asigInsumosMap;
+  state.currentPrendaFotos  = currentPrendaFotos;
   renderPrendaDetail();
   if (navigate) showDetailView('view-prenda-detail', state.currentNav);
 }
@@ -354,6 +366,14 @@ async function loadPrendaDetail(prendaId, navigate = true) {
 // ================================================================
 // 9. RENDER — LISTA DE PRENDAS
 // ================================================================
+// Numerito de % con un fondito pequeño de color (no la tarjeta completa):
+// verde >=90%, amarillo 70-89%, rojo <70%.
+function pctChip(pct) {
+  const color = pct >= 90 ? '#4ade80' : pct >= 70 ? '#facc15' : '#f87171';
+  const bg    = pct >= 90 ? 'rgba(74,222,128,.15)' : pct >= 70 ? 'rgba(250,204,21,.15)' : 'rgba(248,113,113,.18)';
+  return `<span style="color:${color};background:${bg}" class="text-xs font-bold px-2 py-0.5 rounded-full shrink-0">${pct}%</span>`;
+}
+
 function renderPrendas() {
   const isAdmin   = state.profile?.role === 'admin';
   const container = document.getElementById('prendas-list');
@@ -362,6 +382,20 @@ function renderPrendas() {
     document.getElementById('stat-por-procesar').textContent = state.prendas.filter(p => p.status==='por_procesar').length;
     document.getElementById('stat-en-proceso').textContent   = state.prendas.filter(p => p.status==='en_proceso').length;
     document.getElementById('stat-entregado').textContent    = state.prendas.filter(p => p.status==='entregado').length;
+
+    // Totales de dinero/unidades ya validadas por el admin, sumando todas las
+    // prendas (no solo las visibles con el filtro actual).
+    let totalAceptado = 0, totalPagado = 0;
+    state.prendas.forEach(p => (p.asignaciones || []).forEach(a => {
+      const conf = Number(a.cantidad_confirmada) || 0;
+      totalAceptado += conf;
+      totalPagado   += conf * (Number(a.precio_unitario) || 0);
+    }));
+    const elAceptado = document.getElementById('stat-total-aceptado');
+    const elPagado    = document.getElementById('stat-total-pagado');
+    if (elAceptado) elAceptado.textContent = totalAceptado.toLocaleString();
+    if (elPagado)   elPagado.textContent   = '$' + totalPagado.toLocaleString('es-CO');
+    document.getElementById('prendas-stats-money')?.classList.remove('hidden');
   }
 
   let prendas = state.prendas;
@@ -392,6 +426,7 @@ function renderPrendas() {
 
   container.innerHTML = prendas.map(p => {
     const numAsigs = p.asignaciones?.length || 0;
+    const avance   = calcPrendaStats(p, p.asignaciones || []).avance;
     return `
     <div onclick="loadPrendaDetail('${p.id}')" class="card p-4 cursor-pointer fade-in">
       <div class="flex items-start justify-between gap-2 mb-2">
@@ -399,7 +434,10 @@ function renderPrendas() {
           ${p.numero ? `<span class="text-xs font-bold text-gold-400 shrink-0">#${p.numero}</span>` : ''}
           <h3 class="font-bold text-white text-base leading-tight truncate">${escHtml(p.nombre)}</h3>
         </div>
-        ${statusBadge(p.status)}
+        <div class="flex items-center gap-1.5 shrink-0">
+          ${isAdmin ? pctChip(avance) : ''}
+          ${statusBadge(p.status)}
+        </div>
       </div>
       ${p.descripcion ? `<p class="text-slate-500 text-sm mb-2 line-clamp-2">${escHtml(p.descripcion)}</p>` : ''}
       <div class="flex flex-wrap items-center gap-3 text-xs text-slate-500">
@@ -435,12 +473,10 @@ function renderPrendaDetail() {
       </div>
       ${prenda.descripcion ? `<p class="text-slate-400 text-sm mb-2">${escHtml(prenda.descripcion)}</p>` : ''}
       ${isAdmin ? `<p class="text-sm text-slate-500">📦 <strong class="text-white">${Number(prenda.total_unidades).toLocaleString()}</strong> unidades totales en el pedido</p>` : ''}
-      ${prenda.foto_muestra_url ? `
-      <div class="mt-3">
-        <p class="text-xs text-slate-500 mb-1">📸 Muestra</p>
-        <img src="${escHtml(prenda.foto_muestra_url)}" onclick="openPhoto('${escHtml(prenda.foto_muestra_url)}')"
-             class="w-full h-40 object-cover rounded-xl border border-zinc-700 cursor-pointer" />
-      </div>` : ''}
+      <div class="-mx-4 mt-1">
+        ${renderPrendaFotosGaleria(prenda.id, 'muestra', isAdmin)}
+        ${isAdmin ? renderPrendaFotosGaleria(prenda.id, 'admin', isAdmin) : ''}
+      </div>
       ${isAdmin ? `
       <div class="mt-3 pt-3 border-t border-zinc-800 flex items-center gap-2 flex-wrap">
         ${nextStatus ? `<button onclick="updatePrendaStatus('${prenda.id}','${nextStatus}')"
@@ -464,11 +500,13 @@ function renderPrendaDetail() {
 // ================================================================
 function calcPrendaStats(prenda, asigs) {
   const total = Number(prenda.total_unidades) || 0;
-  let asignadas = 0, confirmadas = 0, devoluciones = 0, noConfAprobadas = 0;
+  let asignadas = 0, confirmadas = 0, devoluciones = 0, noConfAprobadas = 0, valorPagado = 0;
   asigs.forEach(a => {
+    const conf = Number(a.cantidad_confirmada) || 0;
     asignadas    += Number(a.cantidad_asignada) || 0;
-    confirmadas  += Number(a.cantidad_confirmada) || 0;
+    confirmadas  += conf;
     devoluciones += Number(a.cantidad_devoluciones) || 0;
+    valorPagado  += conf * (Number(a.precio_unitario) || 0);
     if (a.no_conf_estado === 'aprobado') noConfAprobadas += Number(a.cantidad_no_confeccionadas) || 0;
   });
   // cantidad_confirmada ya queda neta de devoluciones (se resta en el origen), así
@@ -477,7 +515,7 @@ function calcPrendaStats(prenda, asigs) {
   const totalAjustado    = Math.max(0, total - noConfAprobadas);
   const pendientes       = Math.max(0, totalAjustado - confirmadasNetas);
   const avance           = totalAjustado > 0 ? Math.round((confirmadasNetas / totalAjustado) * 100) : 0;
-  return { total, asignadas, confirmadas, devoluciones, confirmadasNetas, noConfAprobadas, totalAjustado, pendientes, avance };
+  return { total, asignadas, confirmadas, devoluciones, confirmadasNetas, noConfAprobadas, totalAjustado, pendientes, avance, valorPagado };
 }
 
 function renderTableroGeneral(prenda, asigs) {
@@ -507,6 +545,10 @@ function renderTableroGeneral(prenda, asigs) {
       <div class="bg-zinc-800 rounded-xl p-2.5">
         <div class="text-green-400 mb-0.5">✅ Confirmadas (netas)</div>
         <div class="text-white font-bold text-lg">${s.confirmadasNetas}</div>
+      </div>
+      <div class="col-span-2 rounded-xl p-2.5" style="background:rgba(204,154,82,.1); border:1px solid rgba(204,154,82,.25)">
+        <div class="text-gold-400 mb-0.5">💰 Valor pagado</div>
+        <div class="text-white font-bold text-lg">$${s.valorPagado.toLocaleString('es-CO')}</div>
       </div>
     </div>
   </div>`;
@@ -932,16 +974,27 @@ function renderAsignacionesAdmin(asigs, container) {
     groups[a.confeccionista_id].items.push(a);
   });
 
-  let html = Object.entries(groups).map(([, g]) => `
+  let html = Object.entries(groups).map(([, g]) => {
+    // Total ya confirmado × precio para ESTA confeccionista en esta prenda —
+    // visible de una vez junto al nombre, sin tener que bajar a cada asignación
+    // (importante cuando una misma prenda tiene varias confeccionistas).
+    const valorGrupo = g.items.reduce((sum, a) =>
+      sum + (Number(a.cantidad_confirmada) || 0) * (Number(a.precio_unitario) || 0), 0);
+    return `
     <div class="card overflow-hidden mb-3">
       <div class="flex items-center gap-3 px-4 py-3 border-b border-zinc-800">
         <div class="w-9 h-9 rounded-full bg-gold-500/20 flex items-center justify-center text-gold-400 font-bold shrink-0">
           ${(g.name||'?').charAt(0).toUpperCase()}
         </div>
-        <div class="min-w-0">
+        <div class="min-w-0 flex-1">
           <p class="font-semibold text-white text-sm">${escHtml(g.name||'Sin nombre')}</p>
           <p class="text-slate-500 text-xs">${escHtml(g.phone||'')}</p>
         </div>
+        ${valorGrupo > 0 ? `
+        <div class="shrink-0 text-right px-2.5 py-1.5 rounded-xl" style="background:rgba(204,154,82,.1); border:1px solid rgba(204,154,82,.25)">
+          <div class="text-[10px] text-gold-400 leading-none mb-0.5">💰 Pagado</div>
+          <div class="text-xs font-bold text-white leading-none">$${valorGrupo.toLocaleString('es-CO')}</div>
+        </div>` : ''}
       </div>
       ${g.items.map(a => {
         const curva              = a.curva_tallas       || {};
@@ -1048,7 +1101,8 @@ function renderAsignacionesAdmin(asigs, container) {
           </div>
         </div>`;
       }).join('')}
-    </div>`).join('');
+    </div>`;
+    }).join('');
 
   if (!html) html = `<p class="text-center text-slate-500 text-sm py-8">Aún no hay asignaciones.<br>Usa el botón de abajo para agregar.</p>`;
 
@@ -1250,8 +1304,6 @@ function renderAsignacionesConf(asigs, container) {
 // 13. CRUD — PRENDAS
 // ================================================================
 let newPrendaFotoFile = null;
-let editPrendaFotoFile = null;
-let editPrendaFotoRemoved = false;
 
 function handleNewPrendaFotoSelect(input) {
   const file = input.files[0];
@@ -1285,11 +1337,13 @@ async function saveNewPrenda() {
 
   if (newPrendaFotoFile && newPrenda?.id) {
     const ext  = newPrendaFotoFile.name.split('.').pop() || 'jpg';
-    const path = `muestras/${newPrenda.id}-${Date.now()}.${ext}`;
+    const path = `muestras/${newPrenda.id}-muestra-${Date.now()}.${ext}`;
     const { error: upErr } = await sb.storage.from('production-photos').upload(path, newPrendaFotoFile, { upsert: true });
     if (!upErr) {
       const { data: { publicUrl } } = sb.storage.from('production-photos').getPublicUrl(path);
-      await sb.from('prendas').update({ foto_muestra_url: publicUrl }).eq('id', newPrenda.id);
+      await sb.from('prenda_fotos').insert({
+        prenda_id: newPrenda.id, foto_url: publicUrl, visibility: 'muestra', uploaded_by: state.user.id
+      });
     } else {
       console.error(upErr);
       showToast('Prenda creada, pero hubo un error al subir la foto', 'error');
@@ -1310,45 +1364,12 @@ function openEditPrendaModal(prendaId) {
     : state.prendas?.find(p => p.id === prendaId);
   if (!prenda) return;
 
-  editPrendaFotoFile = null;
-  editPrendaFotoRemoved = false;
-
   document.getElementById('edit-prenda-id').value = prendaId;
   document.getElementById('edit-prenda-nombre').value = prenda.nombre || '';
   document.getElementById('edit-prenda-descripcion').value = prenda.descripcion || '';
   document.getElementById('edit-prenda-total').value = prenda.total_unidades || '';
 
-  const previewWrap = document.getElementById('edit-prenda-foto-preview-wrap');
-  const previewImg  = document.getElementById('edit-prenda-foto-preview');
-  const buttonsWrap = document.getElementById('edit-prenda-foto-buttons');
-  if (prenda.foto_muestra_url) {
-    previewImg.src = prenda.foto_muestra_url;
-    previewWrap.classList.remove('hidden');
-    buttonsWrap.classList.add('hidden');
-  } else {
-    previewWrap.classList.add('hidden');
-    buttonsWrap.classList.remove('hidden');
-  }
-
   openModal('modal-edit-prenda');
-}
-
-function handleEditPrendaFotoSelect(input) {
-  const file = input.files[0];
-  if (!file) return;
-  editPrendaFotoFile = file;
-  editPrendaFotoRemoved = false;
-  const url = URL.createObjectURL(file);
-  document.getElementById('edit-prenda-foto-preview').src = url;
-  document.getElementById('edit-prenda-foto-preview-wrap').classList.remove('hidden');
-  document.getElementById('edit-prenda-foto-buttons').classList.add('hidden');
-}
-
-function clearEditPrendaFoto() {
-  editPrendaFotoFile = null;
-  editPrendaFotoRemoved = true;
-  document.getElementById('edit-prenda-foto-preview-wrap').classList.add('hidden');
-  document.getElementById('edit-prenda-foto-buttons').classList.remove('hidden');
 }
 
 async function saveEditPrenda() {
@@ -1361,24 +1382,7 @@ async function saveEditPrenda() {
   if (!nombre)           { showToast('Ingresa el nombre de la prenda', 'error'); return; }
   if (!total || total<1) { showToast('Ingresa el total de unidades', 'error'); return; }
 
-  const updateData = { nombre, descripcion, total_unidades: total };
-
-  if (editPrendaFotoFile) {
-    const ext  = editPrendaFotoFile.name.split('.').pop() || 'jpg';
-    const path = `muestras/${prendaId}-${Date.now()}.${ext}`;
-    const { error: upErr } = await sb.storage.from('production-photos').upload(path, editPrendaFotoFile, { upsert: true });
-    if (upErr) {
-      console.error(upErr);
-      showToast('Error al subir la nueva foto', 'error');
-      return;
-    }
-    const { data: { publicUrl } } = sb.storage.from('production-photos').getPublicUrl(path);
-    updateData.foto_muestra_url = publicUrl;
-  } else if (editPrendaFotoRemoved) {
-    updateData.foto_muestra_url = null;
-  }
-
-  const { error } = await sb.from('prendas').update(updateData).eq('id', prendaId);
+  const { error } = await sb.from('prendas').update({ nombre, descripcion, total_unidades: total }).eq('id', prendaId);
   if (error) { showToast('Error al guardar cambios', 'error'); console.error(error); return; }
 
   closeModal('modal-edit-prenda');
@@ -1823,6 +1827,84 @@ function confirmDeleteAsig(asigId) {
 // 15. FOTOS MÚLTIPLES
 // ================================================================
 const MAX_FOTOS_ASIG = 4;
+const MAX_FOTOS_PRENDA = 3;
+
+// Galería de fotos a nivel de PRENDA (no de asignación). visibility:
+//  - 'muestra': la muestra que ve tanto el admin como la confeccionista asignada.
+//  - 'admin':   contexto interno, solo lo ve el admin (RLS lo garantiza en el backend).
+function renderPrendaFotosGaleria(prendaId, visibility, isAdmin) {
+  const fotos = state.currentPrendaFotos?.[visibility] || [];
+  const puedeSubir = isAdmin && fotos.length < MAX_FOTOS_PRENDA;
+  const titulo = visibility === 'muestra' ? '📸 Fotos de muestra' : '🔒 Fotos internas (solo admin)';
+
+  const grid = fotos.length ? `
+    <div class="grid grid-cols-3 gap-2 mb-3">
+      ${fotos.map(f => `
+        <div class="relative">
+          <img src="${escHtml(f.foto_url)}" onclick="openPhoto('${escHtml(f.foto_url)}')"
+               class="w-full h-24 object-cover rounded-xl cursor-pointer border border-zinc-700" />
+          ${isAdmin ? `
+          <button onclick="event.stopPropagation(); eliminarPrendaFoto('${f.id}')"
+            class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/70 hover:bg-red-600 text-white text-xs flex items-center justify-center">✕</button>` : ''}
+        </div>`).join('')}
+    </div>` : `<p class="text-xs text-slate-500 mb-2">Sin fotos todavía.</p>`;
+
+  const uploader = puedeSubir ? `
+    <div class="grid grid-cols-2 gap-2">
+      <label class="flex items-center justify-center gap-1.5 py-2.5 border border-zinc-700 hover:border-gold-500 rounded-xl text-xs text-slate-400 hover:text-gold-400 cursor-pointer">
+        📷 Tomar foto
+        <input type="file" accept="image/*" capture="environment" class="hidden" onchange="handlePrendaFotoUpload('${prendaId}','${visibility}', this)" />
+      </label>
+      <label class="flex items-center justify-center gap-1.5 py-2.5 border border-zinc-700 hover:border-gold-500 rounded-xl text-xs text-slate-400 hover:text-gold-400 cursor-pointer">
+        🖼️ De galería
+        <input type="file" accept="image/*" class="hidden" onchange="handlePrendaFotoUpload('${prendaId}','${visibility}', this)" />
+      </label>
+    </div>` : (isAdmin ? `<p class="text-xs text-slate-500 text-center">Máximo de ${MAX_FOTOS_PRENDA} fotos alcanzado.</p>` : '');
+
+  return `
+    <div class="px-4 py-3 border-t border-zinc-800">
+      <p class="text-xs text-slate-500 mb-2">${titulo} (${fotos.length}/${MAX_FOTOS_PRENDA})</p>
+      ${grid}
+      ${uploader}
+    </div>`;
+}
+
+async function handlePrendaFotoUpload(prendaId, visibility, input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const fotosActuales = state.currentPrendaFotos?.[visibility] || [];
+  if (fotosActuales.length >= MAX_FOTOS_PRENDA) {
+    showToast(`Máximo ${MAX_FOTOS_PRENDA} fotos`, 'error');
+    input.value = ''; return;
+  }
+
+  showToast('Subiendo foto...', 'warn');
+  const ext  = file.name.split('.').pop() || 'jpg';
+  const path = `muestras/${prendaId}-${visibility}-${Date.now()}.${ext}`;
+
+  const { error: upErr } = await sb.storage.from('production-photos').upload(path, file, { upsert: true });
+  if (upErr) { showToast('Error al subir foto', 'error'); return; }
+
+  const { data: { publicUrl } } = sb.storage.from('production-photos').getPublicUrl(path);
+  const { error } = await sb.from('prenda_fotos').insert({
+    prenda_id: prendaId, foto_url: publicUrl, visibility, uploaded_by: state.user.id
+  });
+  if (error) { showToast('Error al guardar la foto', 'error'); return; }
+
+  showToast('📸 Foto agregada');
+  input.value = '';
+  await loadPrendaDetail(prendaId, false);
+}
+
+function eliminarPrendaFoto(fotoId) {
+  confirmAction('¿Eliminar foto?', 'Esta acción no se puede deshacer.', async () => {
+    const { error } = await sb.from('prenda_fotos').delete().eq('id', fotoId);
+    if (error) { showToast('Error al eliminar la foto', 'error'); return; }
+    showToast('Foto eliminada');
+    await loadPrendaDetail(state.currentPrenda.id, false);
+  });
+}
 
 function renderFotosGaleria(asigId, isAdmin) {
   const fotos = state.currentFotos?.[asigId] || [];
